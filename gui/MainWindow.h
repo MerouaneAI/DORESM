@@ -1,7 +1,6 @@
 #pragma once
 #include <QMainWindow>
 #include <QList>
-#include <vector>
 
 class University;
 class QStackedWidget;
@@ -13,11 +12,12 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(University& uni, QWidget* parent = nullptr);
 protected:
-    void closeEvent(QCloseEvent* event) override;   // auto-save on exit
+    void closeEvent(QCloseEvent* event) override;
 private:
     University& uni;
     QStackedWidget* stack = nullptr;
     QList<QPushButton*> navButtons;
-    void addNav(QVBoxLayout* sideLay, const QString& label, int index);
+    void addNav(QVBoxLayout* sideLay, const QString& icon,
+                const QString& label, int index);
     void switchPage(int index);
 };

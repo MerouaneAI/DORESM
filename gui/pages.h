@@ -31,7 +31,8 @@ public:
     explicit RoomsPage(University& uni, QWidget* parent = nullptr);
     void refresh() override;
 private:
-    University& uni; QVBoxLayout* root; void assignDialog();
+    University& uni; QVBoxLayout* root;
+    void assignDialog();
 };
 
 class StudentsPage : public QWidget, public Refreshable {
@@ -39,7 +40,8 @@ public:
     explicit StudentsPage(University& uni, QWidget* parent = nullptr);
     void refresh() override;
 private:
-    University& uni; QVBoxLayout* root; void addDialog();
+    University& uni; QVBoxLayout* root;
+    void addDialog();
 };
 
 class RestaurantPage : public QWidget, public Refreshable {
@@ -55,7 +57,8 @@ public:
     explicit MealBookingPage(University& uni, QWidget* parent = nullptr);
     void refresh() override;
 private:
-    University& uni; QVBoxLayout* root; void bookDialog();
+    University& uni; QVBoxLayout* root;
+    void bookDialog();
 };
 
 class HealthPage : public QWidget, public Refreshable {
@@ -63,7 +66,8 @@ public:
     explicit HealthPage(University& uni, QWidget* parent = nullptr);
     void refresh() override;
 private:
-    University& uni; QVBoxLayout* root; void scheduleDialog();
+    University& uni; QVBoxLayout* root;
+    void scheduleDialog();
 };
 
 class ActivityPage : public QWidget, public Refreshable {
