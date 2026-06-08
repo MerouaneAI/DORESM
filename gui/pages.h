@@ -27,6 +27,10 @@ public:
     void refresh() override;
 private:
     University& uni; QVBoxLayout* root;
+    void addDormitoryDialog();
+    void deleteDormitoryDialog(const QString& dormId);
+    void addRoomDialog(const QString& dormId);
+    void deleteRoomDialog(const QString& dormId);
 };
 
 class RoomsPage : public QWidget, public Refreshable {

@@ -4,6 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <filesystem>
+#include <ctime>
 
 namespace {
     std::vector<std::string> split(const std::string& line, char delim) {
@@ -242,4 +243,26 @@ void University::seedSampleData() {
 
     clinic.schedule(Appointment("S004", "2026-06-08", "10:00", "General check-up"));
     bookMeal(MealBooking("S001", "2026-06-08", MealType::Dinner));
+}
+
+// ---------- Activity log ----------
+void University::logActivity(const std::string& emoji, const std::string& text) {
+    std::time_t now = std::time(nullptr);
+    char buf[16] = "";
+    if (const std::tm* tm = std::localtime(&now))
+        std::strftime(buf, sizeof(buf), "%H:%M", tm);
+    activityLog.insert(activityLog.begin(), ActivityLogItem{emoji, text, buf}); // newest first
+    if (activityLog.size() > 50) activityLog.resize(50);
+}
+
+// ---------- Dormitories ----------
+void University::removeDormitory(const std::string& id) {
+    Dormitory* d = findDormitory(id);
+    if (!d) throw std::runtime_error("Dormitory not found: " + id);
+    // free any students living in this dormitory so records stay consistent
+    for (auto& s : students)
+        if (s.isAccommodated() && s.getDormitoryId() == id)
+            s.clearAccommodation();
+    dormitories.erase(std::remove_if(dormitories.begin(), dormitories.end(),
+        [&](const Dormitory& x){ return x.getId() == id; }), dormitories.end());
 }

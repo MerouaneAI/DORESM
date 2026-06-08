@@ -26,6 +26,7 @@ public:
 
     void  addRoom(const Room& r);
     Room* findRoom(const std::string& number);   // nullptr if not found
+    void removeRoom(const std::string& number);   // throws if not found or still occupied
 
     int totalCapacity() const;
     int totalOccupancy() const;

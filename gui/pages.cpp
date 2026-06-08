@@ -16,6 +16,8 @@
 #include <QStringList>
 #include <QFrame>
 #include <QScrollArea>
+#include <QDate>
+#include <algorithm>
 
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -76,6 +78,14 @@ QProgressBar* makeOccupBar(int pct, const QString& colorHex) {
     return bar;
 }
 
+QString relDateLabel(const QString& iso) {
+    QDate d = QDate::fromString(iso, "yyyy-MM-dd");
+    if (!d.isValid()) return iso;
+    QDate today = QDate::currentDate();
+    if (d == today)            return "Today";
+    if (d == today.addDays(1)) return "Tomorrow";
+    return d.toString("ddd, MMM d");
+}
 } // namespace
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────
@@ -184,16 +194,20 @@ for (int i = 0; i < 6; ++i) {
         "The full activity history will appear here.");
 });
 
-    struct ActivityEntry { const char* emoji; const char* text; const char* time; };
-    ActivityEntry rows[] = {
-        {"👥", "Student Ahmed Benali assigned to Room 204 – Dormitory B", "2 min ago"},
-        {"🍽", "Lunch menu updated for Dormitory A restaurant", "15 min ago"},
-        {"📅", "Meal booking confirmed for 32 students – Dinner", "1 hr ago"},
-        {"🏥", "Health clinic appointment scheduled – Layla Hamidi", "2 hr ago"},
-        {"⚽", "Football training session registered – 18 students", "Yesterday"},
-    };
-    for (const auto& r : rows)
-        actV->addWidget(actRow(r.emoji, r.text, r.time));
+const auto& logEntries = uni.getActivityLog();
+if (logEntries.empty()) {
+    auto* none = new QLabel("  No recent activity yet — actions you take will show up here.");
+    none->setStyleSheet("color:#9CA3AF; font-size:13px; padding:8px 16px 16px;");
+    actV->addWidget(none);
+} else {
+    int shown = 0;
+    for (const auto& e : logEntries) {
+        if (shown++ >= 6) break;
+        actV->addWidget(actRow(QString::fromStdString(e.emoji),
+                               QString::fromStdString(e.text),
+                               QString::fromStdString(e.time)));
+    }
+}
 
     bottomRow->addWidget(actCard, 3);
 
@@ -277,10 +291,43 @@ for (int i = 0; i < 6; ++i) {
     QMessageBox::information(this, "Upcoming Events",
         "The full events calendar will appear here.");
 });
-    evV->addWidget(eventRow("Today",          "Medical check-up day",   "🏥"));
-    evV->addWidget(eventRow("Tomorrow",       "Basketball tournament",   "🏀"));
-    evV->addWidget(eventRow("Sat, Jun 7",     "Cultural film evening",   "🎭"));
-    evV->addWidget(eventRow("Mon, Jun 9",     "Room inspection – Block C","🛏"));
+    {
+    struct Ev { QString date; QString name; QString emoji; };
+    std::vector<Ev> evs;
+    const QString today = QDate::currentDate().toString("yyyy-MM-dd");
+
+    for (const auto& a : uni.getClinic().getAppointments()) {
+        if (a.status != "Scheduled") continue;
+        QString date = QString::fromStdString(a.date);
+        if (date < today) continue;
+        evs.push_back({ date,
+            QString("%1 – %2").arg(QString::fromStdString(a.reason),
+                                   QString::fromStdString(uni.studentName(a.studentId))),
+            "🏥" });
+    }
+    for (const auto& b : uni.getBookings()) {
+        QString date = QString::fromStdString(b.date);
+        if (date < today) continue;
+        evs.push_back({ date,
+            QString("%1 – %2").arg(QString::fromStdString(mealTypeToString(b.meal)),
+                                   QString::fromStdString(uni.studentName(b.studentId))),
+            "📅" });
+    }
+    std::sort(evs.begin(), evs.end(),
+              [](const Ev& a, const Ev& b){ return a.date < b.date; });
+
+    if (evs.empty()) {
+        auto* none = new QLabel("No upcoming events.");
+        none->setStyleSheet("font-size:12px; color:#9CA3AF;");
+        evV->addWidget(none);
+    } else {
+        int shown = 0;
+        for (const auto& e : evs) {
+            if (shown++ >= 5) break;
+            evV->addWidget(eventRow(relDateLabel(e.date), e.name, e.emoji));
+        }
+    }
+}
     rightCol->addWidget(evCard);
     rightCol->addStretch();
 
@@ -302,8 +349,15 @@ DormitoriesPage::DormitoriesPage(University& u, QWidget* parent)
 
 void DormitoriesPage::refresh() {
     clearLayout(root);
-    root->addWidget(pageHeader("Dormitories",
-        "Manage dormitories, capacities, and attached restaurants."));
+auto* head = new QHBoxLayout;
+head->addWidget(pageHeader("Dormitories",
+    "Manage dormitories, capacities, and attached restaurants."));
+head->addStretch();
+auto* addDormBtn = new QPushButton("+ Add Dormitory");
+addDormBtn->setObjectName("Primary");
+head->addWidget(addDormBtn);
+root->addLayout(head);
+connect(addDormBtn, &QPushButton::clicked, this, [this]{ addDormitoryDialog(); });
 
     // Stat row
     int totalBeds = 0, occupiedBeds = 0;
@@ -400,11 +454,100 @@ void DormitoriesPage::refresh() {
         v->addWidget(hDivider());
         v->addLayout(rRow);
 
+        v->addWidget(hDivider());
+auto* actionRow = new QHBoxLayout;
+auto* addRoomBtn = new QPushButton("+ Room");
+auto* delRoomBtn = new QPushButton("Delete Room");
+auto* delDormBtn = new QPushButton("Delete Dorm");
+actionRow->addWidget(addRoomBtn);
+actionRow->addWidget(delRoomBtn);
+actionRow->addStretch();
+actionRow->addWidget(delDormBtn);
+v->addLayout(actionRow);
+
+QString dormId = QString::fromStdString(d.getId());
+connect(addRoomBtn, &QPushButton::clicked, this, [this, dormId]{ addRoomDialog(dormId); });
+connect(delRoomBtn, &QPushButton::clicked, this, [this, dormId]{ deleteRoomDialog(dormId); });
+connect(delDormBtn, &QPushButton::clicked, this, [this, dormId]{ deleteDormitoryDialog(dormId); });
         grid->addWidget(card, row, col);
         if (++col == 2) { col = 0; ++row; }
     }
     root->addLayout(grid);
     root->addStretch();
+}
+
+void DormitoriesPage::addDormitoryDialog() {
+    bool ok = false;
+    QString id = QInputDialog::getText(this, "Add Dormitory", "Dormitory ID (e.g. E):",
+                                       QLineEdit::Normal, "", &ok);
+    if (!ok || id.trimmed().isEmpty()) return;
+    QString name = QInputDialog::getText(this, "Add Dormitory", "Name:",
+                                         QLineEdit::Normal, "Dormitory " + id.trimmed(), &ok);
+    if (!ok || name.trimmed().isEmpty()) return;
+    try {
+        uni.addDormitory(Dormitory(id.trimmed().toStdString(), name.trimmed().toStdString()));
+        uni.logActivity("🏢", ("Added dormitory " + name.trimmed()).toStdString());
+        refresh();
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", e.what());
+    }
+}
+
+void DormitoriesPage::deleteDormitoryDialog(const QString& dormId) {
+    auto* d = uni.findDormitory(dormId.toStdString());
+    if (!d) return;
+    QString nm = QString::fromStdString(d->getName());
+    if (QMessageBox::question(this, "Delete Dormitory",
+            QString("Delete \"%1\" and all its rooms?\nAny residents will be unassigned.").arg(nm))
+        != QMessageBox::Yes) return;
+    try {
+        uni.removeDormitory(dormId.toStdString());
+        uni.logActivity("🗑", ("Deleted dormitory " + nm).toStdString());
+        refresh();
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", e.what());
+    }
+}
+
+void DormitoriesPage::addRoomDialog(const QString& dormId) {
+    auto* d = uni.findDormitory(dormId.toStdString());
+    if (!d) return;
+    bool ok = false;
+    QString num = QInputDialog::getText(this, "Add Room", "Room number:",
+                                        QLineEdit::Normal, "", &ok);
+    if (!ok || num.trimmed().isEmpty()) return;
+    int cap = QInputDialog::getInt(this, "Add Room", "Capacity (1-3):", 1, 1, 3, 1, &ok);
+    if (!ok) return;
+    QString type = cap == 1 ? "Single" : cap == 2 ? "Double" : "Triple";
+    try {
+        if (d->findRoom(num.trimmed().toStdString()))
+            throw std::runtime_error("Room already exists: " + num.trimmed().toStdString());
+        d->addRoom(Room(num.trimmed().toStdString(), cap, type.toStdString()));
+        uni.logActivity("🛏", ("Added room " + num.trimmed() + " to " +
+                               QString::fromStdString(d->getName())).toStdString());
+        refresh();
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", e.what());
+    }
+}
+
+void DormitoriesPage::deleteRoomDialog(const QString& dormId) {
+    auto* d = uni.findDormitory(dormId.toStdString());
+    if (!d) return;
+    QStringList rooms;
+    for (const auto& r : d->getRooms()) rooms << QString::fromStdString(r.getNumber());
+    if (rooms.isEmpty()) { QMessageBox::information(this, "Delete Room", "No rooms to delete."); return; }
+    bool ok = false;
+    QString num = QInputDialog::getItem(this, "Delete Room", "Room:", rooms, 0, false, &ok);
+    if (!ok) return;
+    try {
+        d->removeRoom(num.toStdString());   // throws if occupied
+        uni.logActivity("🗑", ("Deleted room " + num + " from " +
+                               QString::fromStdString(d->getName())).toStdString());
+        refresh();
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", e.what());
+    }
 }
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
@@ -497,6 +640,8 @@ void RoomsPage::assignDialog() {
     if (!ok) return;
     try {
         uni.assignStudentToRoom(sid.toStdString(), dorm.toStdString(), room.toStdString());
+        uni.logActivity("🛏", ("Assigned " + QString::fromStdString(uni.studentName(sid.toStdString()))
+                       + " to Room " + room + " – " + dorm).toStdString());
         refresh();
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", e.what());
@@ -568,7 +713,9 @@ void StudentsPage::refresh() {
             return;
         }
         QString id = table->item(r, 0)->text();
-        try { uni.removeStudent(id.toStdString()); refresh(); }
+        try { uni.removeStudent(id.toStdString());
+            uni.logActivity("👥", ("Removed student " + id).toStdString());
+            refresh(); }
         catch (const std::exception& e) {
             QMessageBox::warning(this, "Error", e.what());
         }
@@ -588,6 +735,7 @@ void StudentsPage::addDialog() {
     if (!ok) return;
     try {
         uni.addStudent(Student(id.toStdString(), name.toStdString(), year));
+        uni.logActivity("👥", ("Added student " + name.trimmed()).toStdString());
         refresh();
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", e.what());
@@ -687,6 +835,7 @@ void RestaurantPage::refresh() {
             [this, dormId]{
                 if (auto* dd = uni.findDormitory(dormId))
                     dd->getRestaurant().serveMeal();
+                    uni.logActivity("🍽", "Served a meal");
                 refresh();
             });
         root->addWidget(card);
@@ -764,6 +913,8 @@ void MealBookingPage::bookDialog() {
     try {
         uni.bookMeal(MealBooking(sid.toStdString(), date.toStdString(),
                                   mealTypeFromString(meal.toStdString())));
+        uni.logActivity("📅", ("Booked " + meal + " for "
+                       + QString::fromStdString(uni.studentName(sid.toStdString()))).toStdString());
         refresh();
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", e.what());
@@ -848,7 +999,9 @@ void HealthPage::scheduleDialog() {
         uni.getClinic().schedule(
             Appointment(sid.toStdString(), date.toStdString(),
                         time.toStdString(), reason.toStdString()));
-        refresh();
+        uni.logActivity("🏥", ("Scheduled appointment for "
+                       + QString::fromStdString(uni.studentName(sid.toStdString()))).toStdString());
+                        refresh();
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", e.what());
     }
@@ -981,7 +1134,8 @@ void ActivityPage::addDialog() {
     else
         uni.addActivity(std::make_unique<CulturalActivity>(
             name.toStdString(), sched.toStdString(), extra.toStdString()));
-    refresh();
+    uni.logActivity(sports ? "⚽" : "🎭", ("Added activity " + name.trimmed()).toStdString());
+            refresh();
 }
 
 void ActivityPage::enrollDialog() {
@@ -1002,7 +1156,10 @@ void ActivityPage::enrollDialog() {
         if (QString::fromStdString(a->getName()) == an &&
             QString::fromStdString(a->category()) == category)
         {
-            try { a->enroll(sid.toStdString()); }
+            try { a->enroll(sid.toStdString()); 
+                uni.logActivity("👥", ("Enrolled " + QString::fromStdString(uni.studentName(sid.toStdString()))
+                       + " in " + an).toStdString());
+            }
             catch (const std::exception& e) {
                 QMessageBox::warning(this, "Error", e.what());
             }

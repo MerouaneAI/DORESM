@@ -8,6 +8,12 @@
 #include "Activity.h"
 #include "MealBooking.h"
 
+struct ActivityLogItem {
+    std::string emoji;
+    std::string text;
+    std::string time;   // "HH:MM"
+};
+
 class University {
 private:
     std::string name;
@@ -16,6 +22,7 @@ private:
     HealthClinic           clinic;
     std::vector<std::unique_ptr<Activity>> activities; // polymorphic ownership
     std::vector<MealBooking>               bookings;
+    std::vector<ActivityLogItem> activityLog;
 public:
     explicit University(std::string name = "ENSIA") : name(std::move(name)) {}
 
@@ -58,4 +65,11 @@ public:
     void saveToFiles(const std::string& dir) const;
     void loadFromFiles(const std::string& dir);
     void seedSampleData();
+
+    // ----- Activity log (drives the dashboard "Recent Activity") -----
+const std::vector<ActivityLogItem>& getActivityLog() const { return activityLog; }
+void logActivity(const std::string& emoji, const std::string& text);
+
+// ----- Dormitories (new) -----
+void removeDormitory(const std::string& id);   // unassigns residents, then deletes
 };

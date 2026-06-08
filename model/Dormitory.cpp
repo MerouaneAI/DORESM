@@ -1,5 +1,6 @@
 #include "Dormitory.h"
 #include <stdexcept>
+#include <algorithm>
 
 Dormitory::Dormitory(std::string id, std::string name)
     : id(std::move(id)), name(std::move(name)),
@@ -15,6 +16,15 @@ Room* Dormitory::findRoom(const std::string& number) {
     for (auto& r : rooms)
         if (r.getNumber() == number) return &r;
     return nullptr;
+}
+
+void Dormitory::removeRoom(const std::string& number) {
+    Room* r = findRoom(number);
+    if (!r) throw std::runtime_error("Room not found: " + number);
+    if (!r->isEmpty())
+        throw std::runtime_error("Cannot delete a room that still has residents");
+    rooms.erase(std::remove_if(rooms.begin(), rooms.end(),
+        [&](const Room& x){ return x.getNumber() == number; }), rooms.end());
 }
 
 int Dormitory::totalCapacity() const {
