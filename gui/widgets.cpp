@@ -115,7 +115,7 @@ QFrame* moduleCard(const QString& emoji, const QString& title,
     return card;
 }
 
-QWidget* activityRow(const QString& emoji, const QString& text, const QString& time) {
+QWidget* actRow(const QString& emoji, const QString& text, const QString& time) {
     auto* w = new QWidget;
     auto* h = new QHBoxLayout(w);
     h->setContentsMargins(16, 12, 16, 12);

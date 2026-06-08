@@ -173,8 +173,8 @@ void DashboardPage::refresh() {
     actHeader->addWidget(viewAll);
     actV->addLayout(actHeader);
 
-    struct ARow { const char* emoji; const char* text; const char* time; };
-    ARow rows[] = {
+    struct ActivityEntry { const char* emoji; const char* text; const char* time; };
+    ActivityEntry rows[] = {
         {"👥", "Student Ahmed Benali assigned to Room 204 – Dormitory B", "2 min ago"},
         {"🍽", "Lunch menu updated for Dormitory A restaurant", "15 min ago"},
         {"📅", "Meal booking confirmed for 32 students – Dinner", "1 hr ago"},
@@ -349,7 +349,7 @@ void DormitoriesPage::refresh() {
 
         // Stats row inside card
         auto* infoRow = new QHBoxLayout; infoRow->setSpacing(20);
-        auto* mkInfo  = [](const QString& val, const QString& lbl) {
+        std::function<QWidget*(const QString&, const QString&)> mkInfo  = [](const QString& val, const QString& lbl) -> QWidget* {
             auto* w = new QWidget;
             auto* vl = new QVBoxLayout(w);
             vl->setContentsMargins(0, 0, 0, 0); vl->setSpacing(2);
@@ -630,7 +630,7 @@ void RestaurantPage::refresh() {
         v->addWidget(hDivider());
 
         const Menu& m = d.getRestaurant().getMenu();
-        auto* mkField = [](const QString& lbl, const QString& val) {
+            std::function<QPair<QWidget*,QLineEdit*>(const QString&, const QString&)> mkField = [](const QString& lbl, const QString& val) -> QPair<QWidget*, QLineEdit*> {
             auto* w = new QWidget; auto* vl = new QVBoxLayout(w);
             vl->setContentsMargins(0,0,0,4); vl->setSpacing(4);
             auto* l = new QLabel(lbl);
@@ -647,6 +647,10 @@ void RestaurantPage::refresh() {
         v->addWidget(lun.first);
         v->addWidget(din.first);
 
+        QLineEdit* bfE  = bf.second;
+        QLineEdit* lunE = lun.second;
+        QLineEdit* dinE = din.second;
+
         auto* btnRow = new QHBoxLayout;
         auto* save  = new QPushButton("💾  Save Menu"); save->setObjectName("Primary");
         auto* serve = new QPushButton("+ Serve Meal");
@@ -654,9 +658,6 @@ void RestaurantPage::refresh() {
         v->addLayout(btnRow);
 
         std::string dormId = d.getId();
-        auto* bfE  = bf.second;
-        auto* lunE = lun.second;
-        auto* dinE = din.second;
         connect(save, &QPushButton::clicked, this,
             [this, dormId, bfE, lunE, dinE]{
                 if (auto* dd = uni.findDormitory(dormId))

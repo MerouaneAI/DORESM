@@ -14,7 +14,7 @@ QWidget* pageHeader(const QString& title, const QString& subtitle);
 QFrame*  moduleCard(const QString& emoji, const QString& title,
                     const QString& desc, const QString& accentBg,
                     std::function<void()> onOpen = nullptr);
-QWidget* activityRow(const QString& emoji, const QString& text,
+QWidget* actRow(const QString& emoji, const QString& text,
                      const QString& time);
 QWidget* eventRow(const QString& dateLabel, const QString& name,
                   const QString& emoji);
