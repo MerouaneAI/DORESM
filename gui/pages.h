@@ -1,6 +1,7 @@
 #pragma once
 #include <QWidget>
 #include <QString>
+#include <functional>
 class University;
 class QVBoxLayout;
 
@@ -13,9 +14,11 @@ public:
 class DashboardPage : public QWidget, public Refreshable {
 public:
     explicit DashboardPage(University& uni, QWidget* parent = nullptr);
+    void setNavigator(std::function<void(int)> nav);   // NEW
     void refresh() override;
 private:
     University& uni; QVBoxLayout* root;
+    std::function<void(int)> navigate;                 // NEW
 };
 
 class DormitoriesPage : public QWidget, public Refreshable {

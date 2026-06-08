@@ -89,6 +89,10 @@ DashboardPage::DashboardPage(University& u, QWidget* parent)
     refresh();
 }
 
+void DashboardPage::setNavigator(std::function<void(int)> nav) {
+    navigate = std::move(nav);
+}
+
 void DashboardPage::refresh() {
     clearLayout(root);
 
@@ -141,12 +145,15 @@ void DashboardPage::refresh() {
         {"🏥", "Health Clinic",
          "Manage appointments and health records for residents.", "#FFF7ED"},
     };
-    for (int i = 0; i < 6; ++i) {
-        auto* mc = moduleCard(mods[i].emoji, mods[i].title,
-                              mods[i].desc, mods[i].bg);
-        mc->setMinimumHeight(150);
-        modGrid->addWidget(mc, i / 3, i % 3);
-    }
+const int modTargets[6] = {1, 2, 4, 5, 6, 7};  // dorm, rooms, restaurant, booking, sports, health
+for (int i = 0; i < 6; ++i) {
+    int target = modTargets[i];
+    auto* mc = moduleCard(mods[i].emoji, mods[i].title,
+                          mods[i].desc, mods[i].bg,
+                          [this, target]{ if (navigate) navigate(target); });
+    mc->setMinimumHeight(150);
+    modGrid->addWidget(mc, i / 3, i % 3);
+}
     root->addLayout(modGrid);
 
     // ── Bottom row: Recent Activity + Right Panel ─────────────────────
@@ -172,6 +179,10 @@ void DashboardPage::refresh() {
     actHeader->addStretch();
     actHeader->addWidget(viewAll);
     actV->addLayout(actHeader);
+    connect(viewAll, &QPushButton::clicked, this, [this]{
+    QMessageBox::information(this, "Recent Activity",
+        "The full activity history will appear here.");
+});
 
     struct ActivityEntry { const char* emoji; const char* text; const char* time; };
     ActivityEntry rows[] = {
@@ -238,6 +249,7 @@ void DashboardPage::refresh() {
     menuHdr->addStretch();
     menuHdr->addWidget(mngMenu);
     menuV->addLayout(menuHdr);
+    connect(mngMenu, &QPushButton::clicked, this, [this]{ if (navigate) navigate(4); });
 
     // Pull first dorm's menu as sample
     if (!uni.getDormitories().empty()) {
@@ -261,6 +273,10 @@ void DashboardPage::refresh() {
         "font-size:12px; padding:0; }");
     evHdr->addWidget(evTitle); evHdr->addStretch(); evHdr->addWidget(evAll);
     evV->addLayout(evHdr);
+    connect(evAll, &QPushButton::clicked, this, [this]{
+    QMessageBox::information(this, "Upcoming Events",
+        "The full events calendar will appear here.");
+});
     evV->addWidget(eventRow("Today",          "Medical check-up day",   "🏥"));
     evV->addWidget(eventRow("Tomorrow",       "Basketball tournament",   "🏀"));
     evV->addWidget(eventRow("Sat, Jun 7",     "Cultural film evening",   "🎭"));

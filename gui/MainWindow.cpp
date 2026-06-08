@@ -59,7 +59,9 @@ MainWindow::MainWindow(University& u, QWidget* parent)
 
     // Pages
     stack = new QStackedWidget;
-    stack->addWidget(new DashboardPage(uni));                  // 0
+    auto* dashboard = new DashboardPage(uni);
+    dashboard->setNavigator([this](int index){ switchPage(index); });
+    stack->addWidget(dashboard);                  // 0
     stack->addWidget(new DormitoriesPage(uni));                // 1
     stack->addWidget(new RoomsPage(uni));                      // 2
     stack->addWidget(new StudentsPage(uni));                   // 3

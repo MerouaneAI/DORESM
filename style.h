@@ -188,4 +188,45 @@ QLineEdit:focus { border-color: #4C6FFF; background: #FFF; }
 /* ── Event row ───────────────────────────────────────── */
 #EventDate { font-size: 11px; color: #9CA3AF; }
 #EventName { font-size: 13px; font-weight: 500; color: #111827; }
+
+/* ── Dialogs (QInputDialog / QMessageBox) ────────────── */
+QDialog, QInputDialog, QMessageBox {
+    background: #FFFFFF;
+}
+QDialog QLabel, QInputDialog QLabel, QMessageBox QLabel {
+    background: transparent;
+    color: #111827;
+    font-size: 13px;
+}
+
+/* ── Combo boxes (used by the selection dialogs) ─────── */
+QComboBox {
+    background: #F9FAFB;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #111827;
+    min-height: 18px;
+}
+QComboBox:focus { border-color: #4C6FFF; background: #FFFFFF; }
+QComboBox::drop-down { border: none; width: 22px; }
+QComboBox QAbstractItemView {
+    background: #FFFFFF;
+    color: #111827;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    outline: none;
+    selection-background-color: #EEF1FF;
+    selection-color: #4C6FFF;
+}
+
+/* ── Spin boxes (used by the numeric "year" dialog) ──── */
+QSpinBox {
+    background: #F9FAFB;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: #111827;
+}
+QSpinBox:focus { border-color: #4C6FFF; background: #FFFFFF; }
 )";
