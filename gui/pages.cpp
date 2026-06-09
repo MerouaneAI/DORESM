@@ -17,6 +17,8 @@
 #include <QFrame>
 #include <QScrollArea>
 #include <QDate>
+#include <QComboBox>
+#include <QSpinBox>
 #include <algorithm>
 
 
@@ -40,6 +42,7 @@ QTableWidget* makeTable(const QStringList& cols) {
     t->setHorizontalHeaderLabels(cols);
     t->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     t->verticalHeader()->setVisible(false);
+    t->verticalHeader()->setDefaultSectionSize(50);
     t->setEditTriggers(QAbstractItemView::NoEditTriggers);
     t->setSelectionBehavior(QAbstractItemView::SelectRows);
     t->setShowGrid(false);
@@ -114,9 +117,7 @@ void DashboardPage::refresh() {
     auto* statRow = new QHBoxLayout;
     statRow->setSpacing(16);
 
-    int meals = 0;
-    for (const auto& d : uni.getDormitories())
-        meals += d.getRestaurant().getMealsServed();
+    int meals = uni.getWeeklyMenu().days[std::max(0, QDate::currentDate().dayOfWeek() - 1)].mealsServed;
 
     statRow->addWidget(statCard("👥",
         QString::number(uni.totalStudents()), "Total Students",
@@ -265,13 +266,11 @@ if (logEntries.empty()) {
     menuV->addLayout(menuHdr);
     connect(mngMenu, &QPushButton::clicked, this, [this]{ if (navigate) navigate(4); });
 
-    // Pull first dorm's menu as sample
-    if (!uni.getDormitories().empty()) {
-        const Menu& m = uni.getDormitories().front().getRestaurant().getMenu();
-        menuV->addWidget(menuRow("🌅", "Breakfast", QString::fromStdString(m.breakfast)));
-        menuV->addWidget(menuRow("☀️",  "Lunch",     QString::fromStdString(m.lunch)));
-        menuV->addWidget(menuRow("🌙", "Dinner",    QString::fromStdString(m.dinner)));
-    }
+    int dayOfWeek = std::max(0, QDate::currentDate().dayOfWeek() - 1);
+    const auto& dailyMenu = uni.getWeeklyMenu().days[dayOfWeek];
+    menuV->addWidget(menuRow("🌅", "Breakfast", QString::fromStdString(dailyMenu.breakfast)));
+    menuV->addWidget(menuRow("☀️",  "Lunch",     QString::fromStdString(dailyMenu.lunch)));
+    menuV->addWidget(menuRow("🌙", "Dinner",    QString::fromStdString(dailyMenu.dinner)));
     rightCol->addWidget(menuPanelCard);
 
     // Upcoming Events
@@ -447,8 +446,7 @@ connect(addDormBtn, &QPushButton::clicked, this, [this]{ addDormitoryDialog(); }
         auto* rIc = new QLabel("🍽"); rIc->setStyleSheet("font-size:14px;");
         auto* rLbl = new QLabel(QString::fromStdString(d.getRestaurant().getName()));
         rLbl->setStyleSheet("font-size:12px; color:#374151;");
-        auto* rServed = new QLabel(
-            QString("Meals served today: %1").arg(d.getRestaurant().getMealsServed()));
+        auto* rServed = new QLabel("Serves central weekly menu");
         rServed->setStyleSheet("font-size:11px; color:#9CA3AF;");
         rRow->addWidget(rIc); rRow->addWidget(rLbl, 1); rRow->addWidget(rServed);
         v->addWidget(hDivider());
@@ -561,36 +559,201 @@ RoomsPage::RoomsPage(University& u, QWidget* parent)
     refresh();
 }
 
+void RoomsPage::applyFilters(QTableWidget* table, QComboBox* dormBox,
+                             QComboBox* typeBox, QComboBox* statusBox,
+                             QLineEdit* studentEdit, QLineEdit* roomEdit) {
+    QString sId   = studentEdit->text().trimmed().toLower();
+    QString sRoom = roomEdit->text().trimmed().toLower();
+    QString sDorm = dormBox->currentIndex() == 0 ? "" : dormBox->currentText();
+    QString sType = typeBox->currentIndex() == 0 ? "" : typeBox->currentText();
+    QString sStat = statusBox->currentIndex() == 0 ? "" : statusBox->currentText();
+
+    // Persist filter values for across-refresh continuity
+    fStudentId = studentEdit->text();
+    fRoom      = roomEdit->text();
+    fDormIdx   = dormBox->currentIndex();
+    fTypeIdx   = typeBox->currentIndex();
+    fStatusIdx = statusBox->currentIndex();
+
+    int visible = 0;
+    for (int r = 0; r < table->rowCount(); ++r) {
+        bool show = true;
+
+        // Student ID filter — search in column 5 (Residents) and check occupant IDs stored in column 6
+        if (!sId.isEmpty() && table->item(r, 6)) {
+            QString ids = table->item(r, 6)->text().toLower();
+            if (!ids.contains(sId)) show = false;
+        }
+        // Room number filter — column 0
+        if (show && !sRoom.isEmpty() && table->item(r, 0)) {
+            if (!table->item(r, 0)->text().toLower().contains(sRoom)) show = false;
+        }
+        // Dormitory filter — column 1
+        if (show && !sDorm.isEmpty() && table->item(r, 1)) {
+            if (table->item(r, 1)->text() != sDorm) show = false;
+        }
+        // Type filter — column 2
+        if (show && !sType.isEmpty() && table->item(r, 2)) {
+            if (table->item(r, 2)->text() != sType) show = false;
+        }
+        // Status filter — column 4 (stored as hidden text in column 7)
+        if (show && !sStat.isEmpty() && table->item(r, 7)) {
+            if (table->item(r, 7)->text() != sStat) show = false;
+        }
+
+        table->setRowHidden(r, !show);
+        if (show) ++visible;
+    }
+
+    // Update result count label — it's stored as the table card's property
+    if (auto* countLbl = table->property("countLabel").value<QLabel*>()) {
+        countLbl->setText(QString("Showing %1 of %2 rooms").arg(visible).arg(table->rowCount()));
+    }
+}
+
 void RoomsPage::refresh() {
     clearLayout(root);
 
+    // ── Header with action buttons ───────────────────────────────────
     auto* head = new QHBoxLayout;
     head->addWidget(pageHeader("Room Management",
-        "View, assign, and manage all dormitory rooms."));
+        "View, assign, reassign, and manage all dormitory rooms."));
     head->addStretch();
-    auto* addBtn = new QPushButton("+ Assign Student");
-    addBtn->setObjectName("Primary");
-    head->addWidget(addBtn);
+
+    auto* maintBtn    = new QPushButton("🔧 Toggle Maintenance");
+    auto* unassignBtn = new QPushButton("Remove from Room");
+    auto* reassignBtn = new QPushButton("🔄  Reassign");
+    auto* assignBtn   = new QPushButton("+ Assign Student");
+    assignBtn->setObjectName("Primary");
+
+    reassignBtn->setStyleSheet(
+        "QPushButton { background:#EEF1FF; color:#4C6FFF; border:1px solid #D1D5DB;"
+        "border-radius:8px; padding:7px 16px; font-weight:500; }"
+        "QPushButton:hover { background:#DDE3FF; }");
+
+    maintBtn->setStyleSheet(
+        "QPushButton { background:#FEF3C7; color:#D97706; border:1px solid #FDE68A;"
+        "border-radius:8px; padding:7px 16px; font-weight:500; }"
+        "QPushButton:hover { background:#FDE68A; }");
+
+    head->addWidget(maintBtn);
+    head->addWidget(unassignBtn);
+    head->addWidget(reassignBtn);
+    head->addWidget(assignBtn);
     root->addLayout(head);
+
+    // ── Stat cards row ───────────────────────────────────────────────
+    int maintRooms = 0;
+    for (const auto& d : uni.getDormitories())
+        for (const auto& r : d.getRooms())
+            if (r.isUnderMaintenance()) ++maintRooms;
 
     auto* sRow = new QHBoxLayout; sRow->setSpacing(16);
     sRow->addWidget(statCard("🛏",  QString::number(uni.totalRooms()),
-                             "Total Rooms",    "",  "#EEF1FF"));
+                             "Total Rooms",    "All dormitories",  "#EEF1FF"));
     sRow->addWidget(statCard("✅",  QString::number(uni.availableRooms()),
-                             "Available",      "",  "#DCFCE7"));
+                             "Available",      "Ready to assign",  "#DCFCE7"));
     sRow->addWidget(statCard("🔴", QString::number(uni.occupiedRooms()),
-                             "Occupied",       "",  "#FEE2E2", "#EF4444"));
+                             "Occupied",       "Currently in use", "#FEE2E2", "#EF4444"));
+    sRow->addWidget(statCard("🔧", QString::number(maintRooms),
+                             "Maintenance",    "Under repair",     "#FEF3C7", "#D97706"));
     root->addLayout(sRow);
 
+    // ── Filter bar ───────────────────────────────────────────────────
+    auto* filterCard = makeCard();
+    auto* filterLay = new QVBoxLayout(filterCard);
+    filterLay->setContentsMargins(20, 16, 20, 16);
+    filterLay->setSpacing(12);
+
+    // Filter title row
+    auto* filterHeader = new QHBoxLayout;
+    auto* filterIcon = new QLabel("🔍");
+    filterIcon->setStyleSheet("font-size:14px;");
+    auto* filterTitle = new QLabel("Filters");
+    filterTitle->setStyleSheet("font-size:14px; font-weight:600; color:#374151;");
+    filterHeader->addWidget(filterIcon);
+    filterHeader->addWidget(filterTitle);
+    filterHeader->addStretch();
+    auto* clearBtn = new QPushButton("Clear Filters");
+    clearBtn->setStyleSheet(
+        "QPushButton { background:transparent; border:none; color:#EF4444;"
+        "font-size:12px; font-weight:500; padding:0; }"
+        "QPushButton:hover { color:#DC2626; }");
+    clearBtn->setCursor(Qt::PointingHandCursor);
+    filterHeader->addWidget(clearBtn);
+    filterLay->addLayout(filterHeader);
+
+    // Filter controls row
+    auto* filterRow = new QHBoxLayout;
+    filterRow->setSpacing(12);
+
+    // Student ID search
+    auto* studentIdEdit = new QLineEdit;
+    studentIdEdit->setPlaceholderText("Search by Student ID...");
+    studentIdEdit->setMinimumWidth(140);
+    studentIdEdit->setText(fStudentId);
+
+    // Dormitory combo
+    auto* dormCombo = new QComboBox;
+    dormCombo->addItem("All Dormitories");
+    for (const auto& d : uni.getDormitories())
+        dormCombo->addItem(QString::fromStdString(d.getName()));
+    dormCombo->setMinimumWidth(140);
+    if (fDormIdx < dormCombo->count()) dormCombo->setCurrentIndex(fDormIdx);
+
+    // Room number search
+    auto* roomEdit = new QLineEdit;
+    roomEdit->setPlaceholderText("Room number...");
+    roomEdit->setMinimumWidth(120);
+    roomEdit->setText(fRoom);
+
+    // Type combo
+    auto* typeCombo = new QComboBox;
+    typeCombo->addItems({"All Types", "Single", "Double", "Triple"});
+    typeCombo->setMinimumWidth(110);
+    if (fTypeIdx < typeCombo->count()) typeCombo->setCurrentIndex(fTypeIdx);
+
+    // Status combo
+    auto* statusCombo = new QComboBox;
+    statusCombo->addItems({"All Status", "Available", "Partial", "Full", "Maintenance"});
+    statusCombo->setMinimumWidth(120);
+    if (fStatusIdx < statusCombo->count()) statusCombo->setCurrentIndex(fStatusIdx);
+
+    filterRow->addWidget(studentIdEdit);
+    filterRow->addWidget(dormCombo);
+    filterRow->addWidget(roomEdit);
+    filterRow->addWidget(typeCombo);
+    filterRow->addWidget(statusCombo);
+    filterLay->addLayout(filterRow);
+
+    root->addWidget(filterCard);
+
+    // ── Result count label ───────────────────────────────────────────
+    auto* countLbl = new QLabel;
+    countLbl->setStyleSheet("font-size:12px; color:#6B7280; padding:0 2px;");
+    root->addWidget(countLbl);
+
+    // ── Table inside card ────────────────────────────────────────────
     auto* tableCard = makeCard();
     auto* tv = new QVBoxLayout(tableCard);
     tv->setContentsMargins(0, 0, 0, 0);
+
+    // Visible columns: Room, Dormitory, Type, Occupancy, Status, Residents
+    // Hidden columns: 6 = student IDs (for filtering), 7 = raw status text
     auto* table = makeTable({"Room", "Dormitory", "Type",
-                              "Occupancy", "Status", "Residents"});
-    int total = 0;
-    for (const auto& d : uni.getDormitories()) total += (int)d.getRooms().size();
-    table->setRowCount(total);
+                              "Occupancy", "Status", "Residents",
+                              "StudentIDs", "RawStatus"});
+    table->setColumnHidden(6, true);   // hidden: student IDs for filter
+    table->setColumnHidden(7, true);   // hidden: raw status text for filter
+
+    // Store countLbl as a property so applyFilters can update it
+    table->setProperty("countLabel", QVariant::fromValue(countLbl));
+
+    int totalRows = 0;
+    for (const auto& d : uni.getDormitories()) totalRows += (int)d.getRooms().size();
+    table->setRowCount(totalRows);
     table->setMinimumHeight(300);
+
     int i = 0;
     for (const auto& d : uni.getDormitories()) {
         for (const auto& rm : d.getRooms()) {
@@ -602,25 +765,110 @@ void RoomsPage::refresh() {
                 QString::fromStdString(rm.getType())));
             table->setItem(i, 3, new QTableWidgetItem(
                 QString("%1/%2").arg(rm.getOccupancy()).arg(rm.getCapacity())));
-            table->setCellWidget(i, 4, pill(
-                QString::fromStdString(rm.status()),
-                QString::fromStdString(rm.status())));
-            QStringList names;
-            for (const auto& occ : rm.getOccupants())
+
+            QString statusText = QString::fromStdString(rm.status());
+            table->setCellWidget(i, 4, pill(statusText, statusText));
+
+            QStringList names, ids;
+            for (const auto& occ : rm.getOccupants()) {
                 names << QString::fromStdString(uni.studentName(occ));
+                ids   << QString::fromStdString(occ);
+            }
             table->setItem(i, 5, new QTableWidgetItem(
-                names.isEmpty() ? "No residents" : names.join(", ")));
+                names.isEmpty() ? "—" : names.join(", ")));
+
+            // Hidden columns for filtering
+            table->setItem(i, 6, new QTableWidgetItem(ids.join(" ")));
+            table->setItem(i, 7, new QTableWidgetItem(statusText));
             ++i;
         }
     }
+
     tv->addWidget(table);
     root->addWidget(tableCard);
-    connect(addBtn, &QPushButton::clicked, this, [this]{ assignDialog(); });
+
+    // ── Connect filter signals ───────────────────────────────────────
+    auto doFilter = [this, table, dormCombo, typeCombo, statusCombo, studentIdEdit, roomEdit]{
+        applyFilters(table, dormCombo, typeCombo, statusCombo, studentIdEdit, roomEdit);
+    };
+    connect(studentIdEdit, &QLineEdit::textChanged, this, doFilter);
+    connect(roomEdit,      &QLineEdit::textChanged, this, doFilter);
+    connect(dormCombo,  QOverload<int>::of(&QComboBox::currentIndexChanged), this, doFilter);
+    connect(typeCombo,  QOverload<int>::of(&QComboBox::currentIndexChanged), this, doFilter);
+    connect(statusCombo,QOverload<int>::of(&QComboBox::currentIndexChanged), this, doFilter);
+
+    connect(clearBtn, &QPushButton::clicked, this, [=]{
+        studentIdEdit->clear();
+        roomEdit->clear();
+        dormCombo->setCurrentIndex(0);
+        typeCombo->setCurrentIndex(0);
+        statusCombo->setCurrentIndex(0);
+    });
+
+    // Apply any persisted filters
+    doFilter();
+
+    // ── Connect action buttons ───────────────────────────────────────
+    connect(assignBtn,   &QPushButton::clicked, this, [this]{ assignDialog(); });
+    connect(reassignBtn, &QPushButton::clicked, this, [this]{ reassignDialog(); });
+    connect(unassignBtn, &QPushButton::clicked, this, [this]{ unassignDialog(); });
+    connect(maintBtn,    &QPushButton::clicked, this, [this, table]{ toggleMaintenanceDialog(table); });
+}
+
+void RoomsPage::toggleMaintenanceDialog(QTableWidget* table) {
+    if (!table) return;
+    int r = table->currentRow();
+    if (r < 0) {
+        QMessageBox::information(this, "Select Room", "Please select a room first.");
+        return;
+    }
+    QString roomNo = table->item(r, 0)->text();
+    QString dormName = table->item(r, 1)->text();
+
+    Dormitory* targetDorm = nullptr;
+    for (auto& d : uni.getDormitories()) {
+        if (QString::fromStdString(d.getName()) == dormName) {
+            targetDorm = &d;
+            break;
+        }
+    }
+    if (!targetDorm) return;
+
+    Room* room = targetDorm->findRoom(roomNo.toStdString());
+    if (!room) return;
+
+    if (!room->isUnderMaintenance()) {
+        if (!room->isEmpty()) {
+            QMessageBox::warning(this, "Cannot enter maintenance",
+                "You have to reassign them to another room first before putting this room in maintenance mode.");
+            return;
+        }
+        room->setMaintenance(true);
+        uni.logActivity("🔧", "Placed room " + roomNo.toStdString() + " in maintenance");
+    } else {
+        room->setMaintenance(false);
+        uni.logActivity("✅", "Removed room " + roomNo.toStdString() + " from maintenance");
+    }
+    refresh();
 }
 
 void RoomsPage::assignDialog() {
     QString sid = pickStudentId(this, uni);
     if (sid.isEmpty()) return;
+
+    // Check if student is already accommodated
+    if (auto* s = uni.findStudent(sid.toStdString())) {
+        if (s->isAccommodated()) {
+            QMessageBox::warning(this, "Already Assigned",
+                QString("Student %1 is already assigned to Room %2 in Dormitory %3.\n"
+                        "Use Reassign to move them.")
+                    .arg(sid,
+                         QString::fromStdString(s->getRoomNumber()),
+                         QString::fromStdString(s->getDormitoryId())));
+            return;
+        }
+    }
+
     QStringList dorms;
     for (const auto& d : uni.getDormitories())
         dorms << QString::fromStdString(d.getId());
@@ -633,7 +881,7 @@ void RoomsPage::assignDialog() {
             if (!r.isFull() && !r.isUnderMaintenance())
                 rooms << QString::fromStdString(r.getNumber());
     if (rooms.isEmpty()) {
-        QMessageBox::warning(this, "Unavailable", "No available rooms.");
+        QMessageBox::warning(this, "Unavailable", "No available rooms in this dormitory.");
         return;
     }
     QString room = QInputDialog::getItem(this, "Assign Student", "Room:", rooms, 0, false, &ok);
@@ -642,6 +890,89 @@ void RoomsPage::assignDialog() {
         uni.assignStudentToRoom(sid.toStdString(), dorm.toStdString(), room.toStdString());
         uni.logActivity("🛏", ("Assigned " + QString::fromStdString(uni.studentName(sid.toStdString()))
                        + " to Room " + room + " – " + dorm).toStdString());
+        refresh();
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", e.what());
+    }
+}
+
+void RoomsPage::reassignDialog() {
+    // Pick only accommodated students
+    QStringList items;
+    for (const auto& s : uni.getStudents())
+        if (s.isAccommodated())
+            items << QString::fromStdString(
+                s.getId() + " – " + s.getFullName() +
+                " (Room " + s.getRoomNumber() + ", Dorm " + s.getDormitoryId() + ")");
+    if (items.isEmpty()) {
+        QMessageBox::warning(this, "Unavailable", "No students are currently assigned to a room.");
+        return;
+    }
+    bool ok = false;
+    QString sel = QInputDialog::getItem(this, "Reassign Student",
+        "Select student to reassign:", items, 0, false, &ok);
+    if (!ok) return;
+    QString sid = sel.section(" – ", 0, 0);
+
+    // Pick new dormitory
+    QStringList dorms;
+    for (const auto& d : uni.getDormitories())
+        dorms << QString::fromStdString(d.getId());
+    QString dorm = QInputDialog::getItem(this, "Reassign Student",
+        "New dormitory:", dorms, 0, false, &ok);
+    if (!ok) return;
+
+    // Pick new room (only available ones)
+    QStringList rooms;
+    if (auto* d = uni.findDormitory(dorm.toStdString()))
+        for (const auto& r : d->getRooms())
+            if (!r.isFull() && !r.isUnderMaintenance())
+                rooms << QString::fromStdString(r.getNumber());
+    if (rooms.isEmpty()) {
+        QMessageBox::warning(this, "Unavailable", "No available rooms in this dormitory.");
+        return;
+    }
+    QString room = QInputDialog::getItem(this, "Reassign Student",
+        "New room:", rooms, 0, false, &ok);
+    if (!ok) return;
+
+    try {
+        uni.reassignStudent(sid.toStdString(), dorm.toStdString(), room.toStdString());
+        uni.logActivity("🔄", ("Reassigned " +
+            QString::fromStdString(uni.studentName(sid.toStdString()))
+            + " → Room " + room + " – " + dorm).toStdString());
+        refresh();
+    } catch (const std::exception& e) {
+        QMessageBox::warning(this, "Error", e.what());
+    }
+}
+
+void RoomsPage::unassignDialog() {
+    // Pick only accommodated students
+    QStringList items;
+    for (const auto& s : uni.getStudents())
+        if (s.isAccommodated())
+            items << QString::fromStdString(
+                s.getId() + " – " + s.getFullName() +
+                " (Room " + s.getRoomNumber() + ", Dorm " + s.getDormitoryId() + ")");
+    if (items.isEmpty()) {
+        QMessageBox::warning(this, "Unavailable", "No students are currently assigned to a room.");
+        return;
+    }
+    bool ok = false;
+    QString sel = QInputDialog::getItem(this, "Remove from Room",
+        "Select student to remove:", items, 0, false, &ok);
+    if (!ok) return;
+    QString sid = sel.section(" – ", 0, 0);
+
+    QString name = QString::fromStdString(uni.studentName(sid.toStdString()));
+    if (QMessageBox::question(this, "Remove from Room",
+            QString("Remove %1 from their current room?\nThey will become unassigned.").arg(name))
+        != QMessageBox::Yes) return;
+
+    try {
+        uni.removeStudentFromRoom(sid.toStdString());
+        uni.logActivity("🚪", ("Removed " + name + " from room").toStdString());
         refresh();
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", e.what());
@@ -659,6 +990,47 @@ StudentsPage::StudentsPage(University& u, QWidget* parent)
     refresh();
 }
 
+void StudentsPage::applyFilters(QTableWidget* table, QLineEdit* idEdit, QLineEdit* nameEdit, 
+                                QComboBox* dormBox, QComboBox* yearBox) {
+    QString sId = idEdit->text().trimmed().toLower();
+    QString sName = nameEdit->text().trimmed().toLower();
+    QString sDorm = dormBox->currentIndex() == 0 ? "" : dormBox->currentText();
+    QString sYear = yearBox->currentIndex() == 0 ? "" : yearBox->currentText().replace("Year ", "");
+
+    fStudentId = idEdit->text();
+    fName = nameEdit->text();
+    fDormIdx = dormBox->currentIndex();
+    fYearIdx = yearBox->currentIndex();
+
+    int visible = 0;
+    for (int r = 0; r < table->rowCount(); ++r) {
+        bool show = true;
+        // ID filter - column 0
+        if (!sId.isEmpty() && table->item(r, 0)) {
+            if (!table->item(r, 0)->text().toLower().contains(sId)) show = false;
+        }
+        // Name filter - column 1
+        if (show && !sName.isEmpty() && table->item(r, 1)) {
+            if (!table->item(r, 1)->text().toLower().contains(sName)) show = false;
+        }
+        // Year filter - column 2
+        if (show && !sYear.isEmpty() && table->item(r, 2)) {
+            if (!table->item(r, 2)->text().contains(sYear)) show = false;
+        }
+        // Dormitory filter - column 4 (hidden dorm column)
+        if (show && !sDorm.isEmpty() && table->item(r, 4)) {
+            if (table->item(r, 4)->text() != sDorm) show = false;
+        }
+
+        table->setRowHidden(r, !show);
+        if (show) ++visible;
+    }
+
+    if (auto* countLbl = table->property("countLabel").value<QLabel*>()) {
+        countLbl->setText(QString("Showing %1 of %2 students").arg(visible).arg(table->rowCount()));
+    }
+}
+
 void StudentsPage::refresh() {
     clearLayout(root);
 
@@ -666,10 +1038,20 @@ void StudentsPage::refresh() {
     head->addWidget(pageHeader("Students",
         "Manage student records and accommodation."));
     head->addStretch();
-    auto* rmBtn  = new QPushButton("Remove Selected");
-    auto* addBtn = new QPushButton("+ Add Student");
+    
+    auto* rmBtn   = new QPushButton("Remove Selected");
+    auto* editBtn = new QPushButton("✏️  Edit Student");
+    auto* addBtn  = new QPushButton("+ Add Student");
     addBtn->setObjectName("Primary");
-    head->addWidget(rmBtn); head->addWidget(addBtn);
+
+    editBtn->setStyleSheet(
+        "QPushButton { background:#EEF1FF; color:#4C6FFF; border:1px solid #D1D5DB;"
+        "border-radius:8px; padding:7px 16px; font-weight:500; }"
+        "QPushButton:hover { background:#DDE3FF; }");
+
+    head->addWidget(rmBtn); 
+    head->addWidget(editBtn); 
+    head->addWidget(addBtn);
     root->addLayout(head);
 
     auto* sRow = new QHBoxLayout; sRow->setSpacing(16);
@@ -683,29 +1065,143 @@ void StudentsPage::refresh() {
         "Unassigned", "No room yet", "#FEF3C7", "#D97706"));
     root->addLayout(sRow);
 
+    // Filter bar
+    auto* filterCard = makeCard();
+    auto* filterLay = new QVBoxLayout(filterCard);
+    filterLay->setContentsMargins(20, 16, 20, 16);
+    filterLay->setSpacing(12);
+
+    auto* filterHeader = new QHBoxLayout;
+    auto* filterIcon = new QLabel("🔍");
+    filterIcon->setStyleSheet("font-size:14px;");
+    auto* filterTitle = new QLabel("Filters");
+    filterTitle->setStyleSheet("font-size:14px; font-weight:600; color:#374151;");
+    filterHeader->addWidget(filterIcon);
+    filterHeader->addWidget(filterTitle);
+    filterHeader->addStretch();
+    auto* clearBtn = new QPushButton("Clear Filters");
+    clearBtn->setStyleSheet(
+        "QPushButton { background:transparent; border:none; color:#EF4444;"
+        "font-size:12px; font-weight:500; padding:0; }"
+        "QPushButton:hover { color:#DC2626; }");
+    clearBtn->setCursor(Qt::PointingHandCursor);
+    filterHeader->addWidget(clearBtn);
+    filterLay->addLayout(filterHeader);
+
+    auto* filterRow = new QHBoxLayout;
+    filterRow->setSpacing(12);
+
+    auto* idEdit = new QLineEdit;
+    idEdit->setPlaceholderText("Search by ID...");
+    idEdit->setMinimumWidth(100);
+    idEdit->setText(fStudentId);
+
+    auto* nameEdit = new QLineEdit;
+    nameEdit->setPlaceholderText("Search by Name...");
+    nameEdit->setMinimumWidth(140);
+    nameEdit->setText(fName);
+
+    auto* dormCombo = new QComboBox;
+    dormCombo->addItem("All Dormitories");
+    for (const auto& d : uni.getDormitories())
+        dormCombo->addItem(QString::fromStdString(d.getName()));
+    dormCombo->setMinimumWidth(140);
+    if (fDormIdx < dormCombo->count()) dormCombo->setCurrentIndex(fDormIdx);
+
+    auto* yearCombo = new QComboBox;
+    yearCombo->addItems({"All Years", "Year 1", "Year 2", "Year 3", "Year 4", "Year 5"});
+    yearCombo->setMinimumWidth(110);
+    if (fYearIdx < yearCombo->count()) yearCombo->setCurrentIndex(fYearIdx);
+
+    filterRow->addWidget(idEdit);
+    filterRow->addWidget(nameEdit);
+    filterRow->addWidget(dormCombo);
+    filterRow->addWidget(yearCombo);
+    filterLay->addLayout(filterRow);
+    root->addWidget(filterCard);
+
+    auto* countLbl = new QLabel;
+    countLbl->setStyleSheet("font-size:12px; color:#6B7280; padding:0 2px;");
+    root->addWidget(countLbl);
+
     auto* tableCard = makeCard();
     auto* tv = new QVBoxLayout(tableCard);
     tv->setContentsMargins(0, 0, 0, 0);
-    auto* table = makeTable({"ID", "Full Name", "Year", "Accommodation"});
+    auto* table = makeTable({"ID", "Full Name", "Year", "Accommodation", "HiddenDorm"});
+    table->setColumnHidden(4, true);
+
+    table->setProperty("countLabel", QVariant::fromValue(countLbl));
+
     auto& studs = uni.getStudents();
     table->setRowCount((int)studs.size());
     table->setMinimumHeight(300);
     for (int i = 0; i < (int)studs.size(); ++i) {
         const auto& s = studs[i];
-        table->setItem(i, 0, new QTableWidgetItem(
-            QString::fromStdString(s.getId())));
-        table->setItem(i, 1, new QTableWidgetItem(
-            QString::fromStdString(s.getFullName())));
-        table->setItem(i, 2, new QTableWidgetItem(
-            QString("Year %1").arg(s.getAcademicYear())));
+        table->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(s.getId())));
+        table->setItem(i, 1, new QTableWidgetItem(QString::fromStdString(s.getFullName())));
+        table->setItem(i, 2, new QTableWidgetItem(QString("Year %1").arg(s.getAcademicYear())));
         table->setCellWidget(i, 3, pill(
             QString::fromStdString(s.accommodationStatus()),
-            s.accommodationStatus() == "Assigned" ? "Available" : "Partial"));
+            s.accommodationStatus() == "Not assigned" ? "Maintenance" : "Available"));
+            
+        QString dormName = "";
+        if (auto* d = uni.findDormitory(s.getDormitoryId())) {
+            dormName = QString::fromStdString(d->getName());
+        }
+        table->setItem(i, 4, new QTableWidgetItem(dormName));
     }
     tv->addWidget(table);
     root->addWidget(tableCard);
 
+    auto doFilter = [this, table, idEdit, nameEdit, dormCombo, yearCombo]{
+        applyFilters(table, idEdit, nameEdit, dormCombo, yearCombo);
+    };
+    connect(idEdit, &QLineEdit::textChanged, this, doFilter);
+    connect(nameEdit, &QLineEdit::textChanged, this, doFilter);
+    connect(dormCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, doFilter);
+    connect(yearCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, doFilter);
+
+    connect(clearBtn, &QPushButton::clicked, this, [=]{
+        idEdit->clear();
+        nameEdit->clear();
+        dormCombo->setCurrentIndex(0);
+        yearCombo->setCurrentIndex(0);
+    });
+
+    doFilter();
+
     connect(addBtn, &QPushButton::clicked, this, [this]{ addDialog(); });
+    
+    connect(editBtn, &QPushButton::clicked, this, [this, table]{
+        int r = table->currentRow();
+        if (r < 0) {
+            QMessageBox::information(this, "Edit", "Select a student row first.");
+            return;
+        }
+        QString id = table->item(r, 0)->text();
+        
+        Student* s = uni.findStudent(id.toStdString());
+        if (!s) return;
+        
+        bool ok = false;
+        QString name = QInputDialog::getText(this, "Edit Student", "Full name:",
+                                             QLineEdit::Normal, QString::fromStdString(s->getFullName()), &ok);
+        if (!ok || name.trimmed().isEmpty()) return;
+        
+        int year = QInputDialog::getInt(this, "Edit Student", "Academic year (1-5):",
+                                        s->getAcademicYear(), 1, 5, 1, &ok);
+        if (!ok) return;
+        
+        try {
+            s->setFullName(name.trimmed().toStdString());
+            s->setAcademicYear(year);
+            uni.logActivity("✏️", "Updated student " + id.toStdString());
+            refresh();
+        } catch (const std::exception& e) {
+            QMessageBox::warning(this, "Error", e.what());
+        }
+    });
+
     connect(rmBtn, &QPushButton::clicked, this, [this, table]{
         int r = table->currentRow();
         if (r < 0) {
@@ -714,7 +1210,7 @@ void StudentsPage::refresh() {
         }
         QString id = table->item(r, 0)->text();
         try { uni.removeStudent(id.toStdString());
-            uni.logActivity("👥", ("Removed student " + id).toStdString());
+            uni.logActivity("👥", "Removed student " + id.toStdString());
             refresh(); }
         catch (const std::exception& e) {
             QMessageBox::warning(this, "Error", e.what());
@@ -735,7 +1231,7 @@ void StudentsPage::addDialog() {
     if (!ok) return;
     try {
         uni.addStudent(Student(id.toStdString(), name.toStdString(), year));
-        uni.logActivity("👥", ("Added student " + name.trimmed()).toStdString());
+        uni.logActivity("👥", "Added student " + name.trimmed().toStdString());
         refresh();
     } catch (const std::exception& e) {
         QMessageBox::warning(this, "Error", e.what());
@@ -755,92 +1251,101 @@ RestaurantPage::RestaurantPage(University& u, QWidget* parent)
 
 void RestaurantPage::refresh() {
     clearLayout(root);
-    root->addWidget(pageHeader("Restaurant & Menus",
-        "Manage daily menus for each dormitory restaurant."));
+    
+    auto* head = new QHBoxLayout;
+    head->addWidget(pageHeader("Weekly Menu",
+        "Manage the centralized weekly menu and track daily meals served."));
+    head->addStretch();
+    auto* saveBtn = new QPushButton("💾 Save Changes");
+    saveBtn->setObjectName("Primary");
+    saveBtn->setMinimumWidth(150);
+    saveBtn->setMinimumHeight(40);
+    saveBtn->setStyleSheet(
+        "QPushButton { background:#4C6FFF; color:white; border-radius:6px; font-weight:600; font-size:14px; }"
+        "QPushButton:hover { background:#3B5BDB; }"
+    );
+    head->addWidget(saveBtn);
+    root->addLayout(head);
 
-    // Total meals stat
     int totalMeals = 0;
-    for (const auto& d : uni.getDormitories())
-        totalMeals += d.getRestaurant().getMealsServed();
+    for (int i = 0; i < 7; ++i) {
+        totalMeals += uni.getWeeklyMenu().days[i].mealsServed;
+    }
 
     auto* sRow = new QHBoxLayout; sRow->setSpacing(16);
     sRow->addWidget(statCard("🍽", QString::number(totalMeals),
-                             "Total Meals Today", "All restaurants", "#FCE7F3"));
-    sRow->addWidget(statCard("🏢",
-        QString::number((int)uni.getDormitories().size()),
-        "Restaurants", "Active", "#EEF1FF"));
+                             "Total Meals", "This Week", "#FCE7F3"), 1);
+    sRow->addWidget(statCard("📅", "7", "Days Planned", "Full Schedule", "#EEF1FF"), 1);
+    sRow->addWidget(statCard("👥", QString::number(uni.totalStudents()), "Eligible Students", "For meals", "#DCFCE7"), 1);
+    sRow->addStretch(1);
     root->addLayout(sRow);
 
-    for (auto& d : uni.getDormitories()) {
-        auto* card = makeCard();
-        auto* v = new QVBoxLayout(card);
-        v->setContentsMargins(20, 20, 20, 20); v->setSpacing(12);
+    auto* tableCard = makeCard();
+    auto* tv = new QVBoxLayout(tableCard);
+    tv->setContentsMargins(0, 0, 0, 0);
 
-        auto* hdr = new QHBoxLayout;
-        auto* ic = new QLabel("🍽");
-        ic->setFixedSize(44, 44); ic->setAlignment(Qt::AlignCenter);
-        ic->setStyleSheet("background:#FCE7F3; border-radius:12px; font-size:20px;");
-        auto* rName = new QLabel(QString::fromStdString(d.getRestaurant().getName()));
-        rName->setStyleSheet("font-size:15px; font-weight:700;");
-        auto* rServed = new QLabel(
-            QString("Meals served today: %1").arg(d.getRestaurant().getMealsServed()));
-        rServed->setStyleSheet("font-size:12px; color:#6B7280;");
-        hdr->addWidget(ic);
-        auto* rCol = new QWidget; auto* rColV = new QVBoxLayout(rCol);
-        rColV->setContentsMargins(0,0,0,0); rColV->setSpacing(2);
-        rColV->addWidget(rName); rColV->addWidget(rServed);
-        hdr->addWidget(rCol, 1);
-        v->addLayout(hdr);
-        v->addWidget(hDivider());
+    auto* table = makeTable({"Day", "Breakfast", "Lunch", "Dinner", "Meals Served"});
+    table->setRowCount(7);
+    table->setMinimumHeight(450);
+    table->verticalHeader()->setVisible(false);
+    table->verticalHeader()->setDefaultSectionSize(55); // Make fields big
+    table->setStyleSheet(
+        "QTableWidget { border: none; background: transparent; }"
+        "QTableWidget::item { padding: 4px; }"
+        "QLineEdit, QSpinBox { padding: 8px 12px; font-size: 14px; color: #374151; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 6px; }"
+        "QLineEdit:focus, QSpinBox:focus { background: #FFFFFF; border: 1px solid #4C6FFF; }"
+    );
 
-        const Menu& m = d.getRestaurant().getMenu();
-            std::function<QPair<QWidget*,QLineEdit*>(const QString&, const QString&)> mkField = [](const QString& lbl, const QString& val) -> QPair<QWidget*, QLineEdit*> {
-            auto* w = new QWidget; auto* vl = new QVBoxLayout(w);
-            vl->setContentsMargins(0,0,0,4); vl->setSpacing(4);
-            auto* l = new QLabel(lbl);
-            l->setStyleSheet("font-size:11px; font-weight:600; color:#6B7280;"
-                             "text-transform:uppercase; letter-spacing:0.5px;");
-            auto* e = new QLineEdit(val);
-            vl->addWidget(l); vl->addWidget(e);
-            return qMakePair(w, e);
-        };
-        auto bf  = mkField("Breakfast", QString::fromStdString(m.breakfast));
-        auto lun = mkField("Lunch",     QString::fromStdString(m.lunch));
-        auto din = mkField("Dinner",    QString::fromStdString(m.dinner));
-        v->addWidget(bf.first);
-        v->addWidget(lun.first);
-        v->addWidget(din.first);
+    const char* days[] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+    
+    for (int i = 0; i < 7; ++i) {
+        const auto& d = uni.getWeeklyMenu().days[i];
+        
+        auto* dayItem = new QTableWidgetItem(days[i]);
+        dayItem->setTextAlignment(Qt::AlignCenter);
+        dayItem->setFont(QFont("Inter", 11, QFont::DemiBold));
+        table->setItem(i, 0, dayItem);
+        
+        auto* bfE = new QLineEdit(QString::fromStdString(d.breakfast));
+        table->setCellWidget(i, 1, bfE);
+        
+        auto* lunE = new QLineEdit(QString::fromStdString(d.lunch));
+        table->setCellWidget(i, 2, lunE);
+        
+        auto* dinE = new QLineEdit(QString::fromStdString(d.dinner));
+        table->setCellWidget(i, 3, dinE);
 
-        QLineEdit* bfE  = bf.second;
-        QLineEdit* lunE = lun.second;
-        QLineEdit* dinE = din.second;
-
-        auto* btnRow = new QHBoxLayout;
-        auto* save  = new QPushButton("💾  Save Menu"); save->setObjectName("Primary");
-        auto* serve = new QPushButton("+ Serve Meal");
-        btnRow->addWidget(save); btnRow->addWidget(serve); btnRow->addStretch();
-        v->addLayout(btnRow);
-
-        std::string dormId = d.getId();
-        connect(save, &QPushButton::clicked, this,
-            [this, dormId, bfE, lunE, dinE]{
-                if (auto* dd = uni.findDormitory(dormId))
-                    dd->getRestaurant().setMenu(
-                        Menu(bfE->text().toStdString(),
-                             lunE->text().toStdString(),
-                             dinE->text().toStdString()));
-                QMessageBox::information(this, "Saved", "Menu updated.");
-            });
-        connect(serve, &QPushButton::clicked, this,
-            [this, dormId]{
-                if (auto* dd = uni.findDormitory(dormId))
-                    dd->getRestaurant().serveMeal();
-                    uni.logActivity("🍽", "Served a meal");
-                refresh();
-            });
-        root->addWidget(card);
+        auto* servedE = new QSpinBox;
+        servedE->setRange(0, 100000);
+        servedE->setValue(d.mealsServed);
+        table->setCellWidget(i, 4, servedE);
     }
-    root->addStretch();
+
+    tv->addWidget(table);
+    root->addWidget(tableCard);
+
+    connect(saveBtn, &QPushButton::clicked, this, [this, table]{
+        saveMenu(table);
+    });
+}
+
+void RestaurantPage::saveMenu(QTableWidget* table) {
+    for (int i = 0; i < 7; ++i) {
+        auto* bfE = qobject_cast<QLineEdit*>(table->cellWidget(i, 1));
+        auto* lunE = qobject_cast<QLineEdit*>(table->cellWidget(i, 2));
+        auto* dinE = qobject_cast<QLineEdit*>(table->cellWidget(i, 3));
+        auto* servedE = qobject_cast<QSpinBox*>(table->cellWidget(i, 4));
+        
+        if (bfE && lunE && dinE && servedE) {
+            uni.getWeeklyMenu().days[i].breakfast = bfE->text().toStdString();
+            uni.getWeeklyMenu().days[i].lunch = lunE->text().toStdString();
+            uni.getWeeklyMenu().days[i].dinner = dinE->text().toStdString();
+            uni.getWeeklyMenu().days[i].mealsServed = servedE->value();
+        }
+    }
+    uni.logActivity("💾", "Updated the weekly menu");
+    QMessageBox::information(this, "Saved", "Weekly menu saved successfully.");
+    refresh();
 }
 
 // ─── Meal Booking ─────────────────────────────────────────────────────────────
@@ -864,23 +1369,45 @@ void MealBookingPage::refresh() {
     head->addWidget(btn);
     root->addLayout(head);
 
-    int confirmed = 0, pending = 0;
-    for (const auto& bk : uni.getBookings())
-        bk.confirmed ? ++confirmed : ++pending;
+    auto* sRow = new QHBoxLayout; sRow->setSpacing(20);
+    
+    // Stat Card
+    auto* totalCard = statCard("📅", QString::number((int)uni.getBookings().size()),
+                               "Total Bookings", "All time", "#EEF1FF");
+    totalCard->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    sRow->addWidget(totalCard);
 
-    auto* sRow = new QHBoxLayout; sRow->setSpacing(16);
-    sRow->addWidget(statCard("📅", QString::number((int)uni.getBookings().size()),
-                             "Total Bookings", "All time", "#EEF1FF"));
-    sRow->addWidget(statCard("✅", QString::number(confirmed),
-                             "Confirmed", "", "#DCFCE7"));
-    sRow->addWidget(statCard("⏳", QString::number(pending),
-                             "Pending", "", "#FEF3C7", "#D97706"));
+    // Filters container (vertically centered next to the card)
+    auto* controlsLayout = new QVBoxLayout;
+    controlsLayout->setAlignment(Qt::AlignVCenter);
+    
+    auto* controlsH = new QHBoxLayout;
+    controlsH->setSpacing(12);
+
+    auto* searchBar = new QLineEdit;
+    searchBar->setPlaceholderText("Search by student name...");
+    searchBar->setMinimumWidth(260);
+    searchBar->setStyleSheet("padding: 10px 14px; font-size: 14px; border: 1px solid #D1D5DB; border-radius: 8px; background: white;");
+    
+    auto* mealCombo = new QComboBox;
+    mealCombo->addItems({"All Meals", "Breakfast", "Lunch", "Dinner"});
+    mealCombo->setMinimumWidth(160);
+    mealCombo->setStyleSheet("padding: 10px 14px; font-size: 14px; border: 1px solid #D1D5DB; border-radius: 8px; background: white;");
+
+    controlsH->addWidget(searchBar);
+    controlsH->addWidget(mealCombo);
+    controlsH->addStretch();
+    
+    controlsLayout->addLayout(controlsH);
+    sRow->addLayout(controlsLayout);
+    sRow->addStretch();
+
     root->addLayout(sRow);
 
     auto* tableCard = makeCard();
     auto* tv = new QVBoxLayout(tableCard);
     tv->setContentsMargins(0, 0, 0, 0);
-    auto* table = makeTable({"Student", "Date", "Meal", "Status"});
+    auto* table = makeTable({"Student", "Date", "Meal"});
     auto& bk = uni.getBookings();
     table->setRowCount((int)bk.size());
     table->setMinimumHeight(300);
@@ -891,12 +1418,24 @@ void MealBookingPage::refresh() {
             QString::fromStdString(bk[i].date)));
         table->setItem(i, 2, new QTableWidgetItem(
             QString::fromStdString(mealTypeToString(bk[i].meal))));
-        table->setCellWidget(i, 3, pill(
-            bk[i].confirmed ? "Confirmed" : "Pending",
-            bk[i].confirmed ? "Available" : "Partial"));
     }
     tv->addWidget(table);
     root->addWidget(tableCard);
+
+    auto doFilter = [table, searchBar, mealCombo](){
+        QString filter = searchBar->text().trimmed().toLower();
+        QString mealFilter = mealCombo->currentText();
+        bool filterMeal = (mealCombo->currentIndex() > 0);
+        for (int i = 0; i < table->rowCount(); ++i) {
+            bool matchName = table->item(i, 0)->text().toLower().contains(filter);
+            bool matchMeal = !filterMeal || table->item(i, 2)->text() == mealFilter;
+            table->setRowHidden(i, !(matchName && matchMeal));
+        }
+    };
+
+    connect(searchBar, &QLineEdit::textChanged, this, doFilter);
+    connect(mealCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, doFilter);
+
     connect(btn, &QPushButton::clicked, this, [this]{ bookDialog(); });
 }
 
@@ -1028,36 +1567,39 @@ void ActivityPage::refresh() {
         sports ? "Register and manage sports programs for students."
                : "Manage cultural and recreational activities."));
     head->addStretch();
-    auto* enrollBtn = new QPushButton("Enroll Student");
     auto* addBtn    = new QPushButton("+ Add Activity");
     addBtn->setObjectName("Primary");
-    head->addWidget(enrollBtn); head->addWidget(addBtn);
+    head->addWidget(addBtn);
     root->addLayout(head);
 
     // Count
-    int count = 0, enrolled = 0;
+    int count = 0, approved = 0, pending = 0;
     for (const auto& a : uni.getActivities()) {
         if (QString::fromStdString(a->category()) != category) continue;
         ++count;
-        enrolled += (int)a->getParticipants().size();
+        for (const auto& e : a->getEnrollments()) {
+            if (e.status == "Approved") ++approved;
+            else if (e.status == "Pending") ++pending;
+        }
     }
 
     auto* sRow = new QHBoxLayout; sRow->setSpacing(16);
     sRow->addWidget(statCard(sports ? "⚽" : "🎭",
         QString::number(count), "Activities", "Registered",
         sports ? "#F0FDF4" : "#FFF7ED"));
-    sRow->addWidget(statCard("👥", QString::number(enrolled),
-                             "Participants", "Enrolled", "#EEF1FF"));
+    sRow->addWidget(statCard("✅", QString::number(approved),
+                             "Approved", "Enrolled", "#DCFCE7"));
+    sRow->addWidget(statCard("⏳", QString::number(pending),
+                             "Pending", "Awaiting review", "#FEF3C7", "#D97706"));
     root->addLayout(sRow);
 
-    auto* grid = new QGridLayout; grid->setSpacing(16);
-    int col = 0, row = 0;
+    // Activity cards with enrollment details
     for (const auto& a : uni.getActivities()) {
         if (QString::fromStdString(a->category()) != category) continue;
 
         auto* card = makeCard();
         auto* v = new QVBoxLayout(card);
-        v->setContentsMargins(20, 20, 20, 20); v->setSpacing(10);
+        v->setContentsMargins(24, 20, 24, 20); v->setSpacing(12);
 
         auto* hr = new QHBoxLayout;
         auto* ic = new QLabel(sports ? "⚽" : "🎭");
@@ -1066,10 +1608,8 @@ void ActivityPage::refresh() {
                           (sports ? "#F0FDF4" : "#FFF7ED") +
                           "; border-radius:12px; font-size:20px;");
         auto* aName = new QLabel(QString::fromStdString(a->getName()));
-        aName->setStyleSheet("font-size:15px; font-weight:700;");
+        aName->setStyleSheet("font-size:16px; font-weight:700;");
         hr->addWidget(ic); hr->addWidget(aName, 1);
-        hr->addWidget(pill(QString("%1 enrolled")
-            .arg(a->getParticipants().size()), "Available"));
         v->addLayout(hr);
 
         auto* desc = new QLabel(QString::fromStdString(a->describe()));
@@ -1077,22 +1617,90 @@ void ActivityPage::refresh() {
         desc->setWordWrap(true);
         v->addWidget(desc);
 
-        if (!a->getParticipants().empty()) {
+        // Enrollments list
+        const auto& enrollments = a->getEnrollments();
+        if (!enrollments.empty()) {
             v->addWidget(hDivider());
-            auto* plbl = new QLabel("Participants:");
-            plbl->setStyleSheet("font-size:11px; font-weight:600; color:#6B7280;");
-            v->addWidget(plbl);
-            QStringList names;
-            for (const auto& pid : a->getParticipants())
-                names << QString::fromStdString(uni.studentName(pid));
-            auto* pnames = new QLabel(names.join(", "));
-            pnames->setStyleSheet("font-size:12px; color:#374151;");
-            pnames->setWordWrap(true);
-            v->addWidget(pnames);
+            auto* enrollTitle = new QLabel("📋  Applications & Enrollments");
+            enrollTitle->setStyleSheet("font-size:13px; font-weight:700; color:#374151;");
+            v->addWidget(enrollTitle);
+
+            for (const auto& e : enrollments) {
+                auto* row = new QHBoxLayout;
+                row->setSpacing(10);
+
+                auto* nameLabel = new QLabel("👤 " + QString::fromStdString(uni.studentName(e.studentId)));
+                nameLabel->setStyleSheet("font-size:13px; font-weight:500; color:#111827;");
+                row->addWidget(nameLabel, 1);
+
+                if (e.status == "Pending") {
+                    auto* statusLabel = new QLabel("⏳ Pending");
+                    statusLabel->setStyleSheet("font-size:12px; font-weight:600; color:#D97706; padding:4px 10px;"
+                        " background:#FEF3C7; border-radius:8px;");
+                    row->addWidget(statusLabel);
+
+                    auto* approveBtn = new QPushButton("✅ Approve");
+                    approveBtn->setCursor(Qt::PointingHandCursor);
+                    approveBtn->setStyleSheet(
+                        "QPushButton { background:#DCFCE7; color:#16A34A; border:none; border-radius:8px;"
+                        " padding:6px 14px; font-size:12px; font-weight:600; }"
+                        "QPushButton:hover { background:#BBF7D0; }");
+
+                    auto* refuseBtn = new QPushButton("❌ Refuse");
+                    refuseBtn->setCursor(Qt::PointingHandCursor);
+                    refuseBtn->setStyleSheet(
+                        "QPushButton { background:#FEE2E2; color:#EF4444; border:none; border-radius:8px;"
+                        " padding:6px 14px; font-size:12px; font-weight:600; }"
+                        "QPushButton:hover { background:#FECACA; }");
+
+                    row->addWidget(approveBtn);
+                    row->addWidget(refuseBtn);
+
+                    QString actName = QString::fromStdString(a->getName());
+                    QString sid = QString::fromStdString(e.studentId);
+                    connect(approveBtn, &QPushButton::clicked, this, [this, actName, sid]() {
+                        for (auto& act : uni.getActivities()) {
+                            if (QString::fromStdString(act->getName()) == actName) {
+                                act->approve(sid.toStdString());
+                                uni.logActivity("✅", "Approved " +
+                                    uni.studentName(sid.toStdString()) + " for " + actName.toStdString());
+                                break;
+                            }
+                        }
+                        refresh();
+                    });
+                    connect(refuseBtn, &QPushButton::clicked, this, [this, actName, sid]() {
+                        for (auto& act : uni.getActivities()) {
+                            if (QString::fromStdString(act->getName()) == actName) {
+                                act->refuse(sid.toStdString());
+                                uni.logActivity("❌", "Refused " +
+                                    uni.studentName(sid.toStdString()) + " for " + actName.toStdString());
+                                break;
+                            }
+                        }
+                        refresh();
+                    });
+                } else if (e.status == "Approved") {
+                    auto* statusLabel = new QLabel("✅ Approved");
+                    statusLabel->setStyleSheet("font-size:12px; font-weight:600; color:#16A34A; padding:4px 10px;"
+                        " background:#DCFCE7; border-radius:8px;");
+                    row->addWidget(statusLabel);
+                } else {
+                    auto* statusLabel = new QLabel("❌ Refused");
+                    statusLabel->setStyleSheet("font-size:12px; font-weight:600; color:#EF4444; padding:4px 10px;"
+                        " background:#FEE2E2; border-radius:8px;");
+                    row->addWidget(statusLabel);
+                }
+
+                v->addLayout(row);
+            }
+        } else {
+            auto* noEnroll = new QLabel("No applications yet.");
+            noEnroll->setStyleSheet("font-size:12px; color:#9CA3AF; font-style:italic;");
+            v->addWidget(noEnroll);
         }
 
-        grid->addWidget(card, row, col);
-        if (++col == 2) { col = 0; ++row; }
+        root->addWidget(card);
     }
 
     if (count == 0) {
@@ -1106,13 +1714,10 @@ void ActivityPage::refresh() {
         et->setStyleSheet("color:#9CA3AF; font-size:14px;");
         ev->addWidget(et);
         root->addWidget(empty);
-    } else {
-        root->addLayout(grid);
     }
     root->addStretch();
 
-    connect(addBtn,    &QPushButton::clicked, this, [this]{ addDialog(); });
-    connect(enrollBtn, &QPushButton::clicked, this, [this]{ enrollDialog(); });
+    connect(addBtn, &QPushButton::clicked, this, [this]{ addDialog(); });
 }
 
 void ActivityPage::addDialog() {
@@ -1135,36 +1740,9 @@ void ActivityPage::addDialog() {
         uni.addActivity(std::make_unique<CulturalActivity>(
             name.toStdString(), sched.toStdString(), extra.toStdString()));
     uni.logActivity(sports ? "⚽" : "🎭", ("Added activity " + name.trimmed()).toStdString());
-            refresh();
+    refresh();
 }
 
 void ActivityPage::enrollDialog() {
-    QStringList acts;
-    for (const auto& a : uni.getActivities())
-        if (QString::fromStdString(a->category()) == category)
-            acts << QString::fromStdString(a->getName());
-    if (acts.isEmpty()) {
-        QMessageBox::warning(this, "Unavailable", "No activities yet.");
-        return;
-    }
-    bool ok = false;
-    QString an = QInputDialog::getItem(this, "Enroll", "Activity:", acts, 0, false, &ok);
-    if (!ok) return;
-    QString sid = pickStudentId(this, uni);
-    if (sid.isEmpty()) return;
-    for (const auto& a : uni.getActivities()) {
-        if (QString::fromStdString(a->getName()) == an &&
-            QString::fromStdString(a->category()) == category)
-        {
-            try { a->enroll(sid.toStdString()); 
-                uni.logActivity("👥", ("Enrolled " + QString::fromStdString(uni.studentName(sid.toStdString()))
-                       + " in " + an).toStdString());
-            }
-            catch (const std::exception& e) {
-                QMessageBox::warning(this, "Error", e.what());
-            }
-            break;
-        }
-    }
-    refresh();
+    // No longer needed — enrollment happens through student applications
 }

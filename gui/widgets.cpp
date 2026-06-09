@@ -22,50 +22,71 @@ QFrame* statCard(const QString& emoji, const QString& value,
                  const QString& label, const QString& trend,
                  const QString& accentBg, const QString& trendColor) {
     auto* card = makeCard();
-    auto* lay  = new QVBoxLayout(card);
-    lay->setContentsMargins(20, 20, 20, 20);
-    lay->setSpacing(8);
+    card->setMinimumHeight(110);
+    card->setMaximumHeight(130);
+    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-    // Icon badge
-    auto* icon = new QLabel(emoji);
-    icon->setFixedSize(44, 44);
-    icon->setAlignment(Qt::AlignCenter);
-    icon->setStyleSheet(
-        "background:" + accentBg + "; border-radius: 12px; font-size: 20px;");
-    lay->addWidget(icon);
+    auto* lay = new QHBoxLayout(card);
+    lay->setContentsMargins(24, 20, 24, 20);
+    lay->setSpacing(16);
 
-    // Value
-    auto* val = new QLabel(value);
-    val->setObjectName("StatValue");
-    lay->addWidget(val);
-
-    // Label
+    // Text Column (Left)
+    auto* textCol = new QVBoxLayout;
+    textCol->setSpacing(4);
+    
     auto* lbl = new QLabel(label);
     lbl->setObjectName("StatLabel");
-    lay->addWidget(lbl);
+    textCol->addWidget(lbl);
 
-    // Trend
+    auto* val = new QLabel(value);
+    val->setObjectName("StatValue");
+    textCol->addWidget(val);
+
     if (!trend.isEmpty()) {
         auto* tr = new QLabel(trend);
         tr->setObjectName("StatTrend");
-        tr->setStyleSheet("color:" + trendColor + "; font-size:12px;");
-        lay->addWidget(tr);
+        tr->setStyleSheet("color:" + trendColor + "; font-size:12px; font-weight:500;");
+        textCol->addWidget(tr);
     }
+    textCol->addStretch();
+    lay->addLayout(textCol);
+
     lay->addStretch();
+
+    // Icon Column (Right)
+    auto* iconCol = new QVBoxLayout;
+    auto* icon = new QLabel(emoji);
+    icon->setFixedSize(52, 52);
+    icon->setAlignment(Qt::AlignCenter);
+    icon->setStyleSheet("background:" + accentBg + "; border-radius:14px; font-size:24px;");
+    iconCol->addWidget(icon);
+    iconCol->addStretch();
+    lay->addLayout(iconCol);
+
     return card;
 }
 
 QWidget* pill(const QString& text, const QString& status) {
+    auto* container = new QWidget;
+    auto* lay = new QHBoxLayout(container);
+    lay->setContentsMargins(0, 0, 0, 0);
+
     auto* l = new QLabel(" " + text + " ");
     QString bg = "#EEF1FF", fg = "#4C6FFF";
-    if (status == "Full" || status == "Maintenance") { bg = "#FEE2E2"; fg = "#EF4444"; }
+    if (status == "Full") { bg = "#FEE2E2"; fg = "#EF4444"; }
+    else if (status == "Maintenance") { bg = "#FEF3C7"; fg = "#D97706"; }
     else if (status == "Available") { bg = "#DCFCE7"; fg = "#16A34A"; }
     else if (status == "Partial")   { bg = "#DBEAFE"; fg = "#2563EB"; }
     l->setStyleSheet("background:" + bg + "; color:" + fg +
-                     "; border-radius:10px; padding:3px 8px;"
-                     " font-size:12px; font-weight:500;");
+                     "; border-radius:14px; padding:6px 14px;"
+                     " font-size:14px; font-weight:600;");
     l->setAlignment(Qt::AlignCenter);
-    return l;
+
+    lay->addStretch();
+    lay->addWidget(l, 0, Qt::AlignCenter);
+    lay->addStretch();
+
+    return container;
 }
 
 QWidget* pageHeader(const QString& title, const QString& subtitle) {

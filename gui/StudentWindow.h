@@ -1,25 +1,28 @@
 #pragma once
 #include <QMainWindow>
 #include <QList>
+#include <QString>
 
 class University;
+class Student;
 class QStackedWidget;
 class QPushButton;
 class QVBoxLayout;
 
-class MainWindow : public QMainWindow {
+class StudentWindow : public QMainWindow {
     Q_OBJECT
 public:
-    explicit MainWindow(University& uni, QWidget* parent = nullptr);
+    explicit StudentWindow(University& uni, const QString& studentId, QWidget* parent = nullptr);
 signals:
     void loggedOut();
-protected:
-    void closeEvent(QCloseEvent* event) override;
 private:
     University& uni;
+    QString studentId;
     QStackedWidget* stack = nullptr;
     QList<QPushButton*> navButtons;
+
     void addNav(QVBoxLayout* sideLay, const QString& icon,
                 const QString& label, int index);
     void switchPage(int index);
+    Student* currentStudent();
 };

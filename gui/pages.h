@@ -33,13 +33,26 @@ private:
     void deleteRoomDialog(const QString& dormId);
 };
 
+class QLineEdit;
+class QComboBox;
+class QTableWidget;
+
 class RoomsPage : public QWidget, public Refreshable {
 public:
     explicit RoomsPage(University& uni, QWidget* parent = nullptr);
     void refresh() override;
 private:
     University& uni; QVBoxLayout* root;
+    // Filter widgets (persisted across refreshes by storing filter values)
+    QString fStudentId, fRoom;
+    int fDormIdx = 0, fTypeIdx = 0, fStatusIdx = 0;
     void assignDialog();
+    void reassignDialog();
+    void unassignDialog();
+    void toggleMaintenanceDialog(QTableWidget* table);
+    void applyFilters(QTableWidget* table, QComboBox* dormBox,
+                      QComboBox* typeBox, QComboBox* statusBox,
+                      QLineEdit* studentEdit, QLineEdit* roomEdit);
 };
 
 class StudentsPage : public QWidget, public Refreshable {
@@ -48,7 +61,15 @@ public:
     void refresh() override;
 private:
     University& uni; QVBoxLayout* root;
+    // Filter widgets (persisted across refreshes)
+    QString fStudentId, fName;
+    int fDormIdx = 0;
+    int fYearIdx = 0;
+    
     void addDialog();
+    void editDialog();
+    void applyFilters(QTableWidget* table, QLineEdit* idEdit, QLineEdit* nameEdit, 
+                      QComboBox* dormBox, QComboBox* yearBox);
 };
 
 class RestaurantPage : public QWidget, public Refreshable {
@@ -57,6 +78,7 @@ public:
     void refresh() override;
 private:
     University& uni; QVBoxLayout* root;
+    void saveMenu(QTableWidget* table);
 };
 
 class MealBookingPage : public QWidget, public Refreshable {

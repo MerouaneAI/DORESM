@@ -7,6 +7,7 @@
 #include "HealthClinic.h"
 #include "Activity.h"
 #include "MealBooking.h"
+#include "WeeklyMenu.h"
 
 struct ActivityLogItem {
     std::string emoji;
@@ -23,6 +24,7 @@ private:
     std::vector<std::unique_ptr<Activity>> activities; // polymorphic ownership
     std::vector<MealBooking>               bookings;
     std::vector<ActivityLogItem> activityLog;
+    WeeklyMenu weeklyMenu;
 public:
     explicit University(std::string name = "ENSIA") : name(std::move(name)) {}
 
@@ -47,6 +49,9 @@ public:
                              const std::string& dormId,
                              const std::string& roomNumber);
     void removeStudentFromRoom(const std::string& studentId);
+    void reassignStudent(const std::string& studentId,
+                         const std::string& newDormId,
+                         const std::string& newRoomNumber);
 
     // ----- Added services -----
     HealthClinic& getClinic() { return clinic; }
@@ -54,6 +59,10 @@ public:
     void addActivity(std::unique_ptr<Activity> a) { activities.push_back(std::move(a)); }
     std::vector<MealBooking>& getBookings() { return bookings; }
     void bookMeal(const MealBooking& b);
+
+    // ----- Weekly Menu -----
+    WeeklyMenu& getWeeklyMenu() { return weeklyMenu; }
+    const WeeklyMenu& getWeeklyMenu() const { return weeklyMenu; }
 
     // ----- Stats -----
     int totalStudents()  const { return static_cast<int>(students.size()); }

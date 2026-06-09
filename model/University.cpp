@@ -75,6 +75,30 @@ void University::removeStudentFromRoom(const std::string& studentId) {
     s->clearAccommodation();
 }
 
+void University::reassignStudent(const std::string& studentId,
+                                 const std::string& newDormId,
+                                 const std::string& newRoomNumber) {
+    Student* s = findStudent(studentId);
+    if (!s) throw std::runtime_error("Student not found: " + studentId);
+
+    // Save old placement for rollback
+    std::string oldDorm = s->getDormitoryId();
+    std::string oldRoom = s->getRoomNumber();
+
+    // Remove from current room (no-op if unassigned)
+    removeStudentFromRoom(studentId);
+
+    // Assign to new room; rollback if it fails
+    try {
+        assignStudentToRoom(studentId, newDormId, newRoomNumber);
+    } catch (...) {
+        if (!oldRoom.empty()) {
+            try { assignStudentToRoom(studentId, oldDorm, oldRoom); } catch (...) {}
+        }
+        throw;   // re-throw original error
+    }
+}
+
 void University::bookMeal(const MealBooking& b) {
     if (!findStudent(b.studentId)) throw std::runtime_error("Unknown student for booking");
     bookings.push_back(b);
@@ -118,9 +142,12 @@ void University::saveToFiles(const std::string& dir) const {
             for (size_t i = 0; i < occ.size(); ++i) { fd << occ[i]; if (i + 1 < occ.size()) fd << ','; }
             fd << '\n';
         }
-        const Menu& m = d.getRestaurant().getMenu();
-        fd << "MENU|" << m.breakfast << '|' << m.lunch << '|' << m.dinner
-           << '|' << d.getRestaurant().getMealsServed() << '\n';
+    }
+
+    std::ofstream fm(dir + "/weekly_menu.txt");
+    for (int i = 0; i < 7; ++i) {
+        fm << weeklyMenu.days[i].breakfast << '|' << weeklyMenu.days[i].lunch << '|'
+           << weeklyMenu.days[i].dinner << '|' << weeklyMenu.days[i].mealsServed << '\n';
     }
 
     std::ofstream fb(dir + "/bookings.txt");
@@ -134,8 +161,11 @@ void University::saveToFiles(const std::string& dir) const {
         if (auto* sp = dynamic_cast<SportsActivity*>(a.get()))   extra = sp->getCoach();
         else if (auto* cu = dynamic_cast<CulturalActivity*>(a.get())) extra = cu->getVenue();
         fa << a->category() << '|' << a->getName() << '|' << a->getSchedule() << '|' << extra << '|';
-        const auto& p = a->getParticipants();
-        for (size_t i = 0; i < p.size(); ++i) { fa << p[i]; if (i + 1 < p.size()) fa << ','; }
+        const auto& enr = a->getEnrollments();
+        for (size_t i = 0; i < enr.size(); ++i) {
+            fa << enr[i].studentId << ':' << enr[i].status;
+            if (i + 1 < enr.size()) fa << ',';
+        }
         fa << '\n';
     }
 
@@ -165,9 +195,21 @@ void University::loadFromFiles(const std::string& dir) {
             if (t.size() > 4 && t[4] == "1") r.setMaintenance(true);
             current->addRoom(r);
         } else if (t[0] == "MENU" && current) {
-            current->getRestaurant().setMenu(Menu(t[1], t[2], t[3]));
-            if (t.size() > 4) { int n = std::stoi(t[4]); for (int i = 0; i < n; ++i) current->getRestaurant().serveMeal(); }
+            // Deprecated format, ignore
         }
+    }
+
+    std::ifstream fm(dir + "/weekly_menu.txt");
+    int dIdx = 0;
+    while (std::getline(fm, line) && dIdx < 7) {
+        auto tokens = split(line, '|');
+        if (tokens.size() >= 4) {
+            weeklyMenu.days[dIdx].breakfast = tokens[0];
+            weeklyMenu.days[dIdx].lunch = tokens[1];
+            weeklyMenu.days[dIdx].dinner = tokens[2];
+            weeklyMenu.days[dIdx].mealsServed = std::stoi(tokens[3]);
+        }
+        ++dIdx;
     }
 
     std::ifstream fs(dir + "/students.txt");
@@ -193,8 +235,22 @@ void University::loadFromFiles(const std::string& dir) {
         std::unique_ptr<Activity> a;
         if (t[0] == "Sports") a = std::make_unique<SportsActivity>(t[1], t[2], t.size() > 3 ? t[3] : "");
         else                  a = std::make_unique<CulturalActivity>(t[1], t[2], t.size() > 3 ? t[3] : "");
-        if (t.size() > 4 && !t[4].empty())
-            for (auto& p : split(t[4], ',')) if (!p.empty()) a->enroll(p);
+        if (t.size() > 4 && !t[4].empty()) {
+            for (auto& entry : split(t[4], ',')) {
+                if (entry.empty()) continue;
+                auto colonPos = entry.find(':');
+                if (colonPos != std::string::npos) {
+                    // New format: studentId:status
+                    std::string sid = entry.substr(0, colonPos);
+                    std::string status = entry.substr(colonPos + 1);
+                    a->getEnrollments().emplace_back(sid, status);
+                } else {
+                    // Legacy format: plain student ID → treat as Approved
+                    a->getEnrollments().emplace_back(entry, "Approved");
+                }
+            }
+            a->rebuildParticipants();
+        }
         activities.push_back(std::move(a));
     }
 
@@ -220,8 +276,14 @@ void University::seedSampleData() {
             std::string num = id + "-" + std::to_string(100 * (i + 1) + n);
             d.addRoom(Room(num, cap, cap == 1 ? "Single" : cap == 2 ? "Double" : "Triple"));
         }
-        d.getRestaurant().setMenu(Menu("Bread, Jam, Coffee", "Chicken Tajine, Salad", "Pasta, Yogurt, Fruit"));
         dormitories.push_back(d);
+    }
+
+    for (int i = 0; i < 7; ++i) {
+        weeklyMenu.days[i].breakfast = "Bread, Jam, Coffee";
+        weeklyMenu.days[i].lunch = "Chicken Tajine, Salad";
+        weeklyMenu.days[i].dinner = "Pasta, Yogurt, Fruit";
+        weeklyMenu.days[i].mealsServed = 0;
     }
 
     addStudent(Student("S001", "Ahmed Benali",   2));

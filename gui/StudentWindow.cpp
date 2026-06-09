@@ -1,5 +1,5 @@
-#include "gui/MainWindow.h"
-#include "gui/pages.h"
+#include "gui/StudentWindow.h"
+#include "gui/StudentPages.h"
 #include "model/University.h"
 
 #include <QWidget>
@@ -9,13 +9,15 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QScrollArea>
-#include <QCloseEvent>
 #include <QFrame>
 
-MainWindow::MainWindow(University& u, QWidget* parent)
-    : QMainWindow(parent), uni(u)
+StudentWindow::StudentWindow(University& u, const QString& sid, QWidget* parent)
+    : QMainWindow(parent), uni(u), studentId(sid)
 {
-    setWindowTitle("UDRMS – University Dormitory & Restaurant Management System");
+    Student* s = currentStudent();
+    QString name = s ? QString::fromStdString(s->getFullName()) : "Student";
+
+    setWindowTitle("UDRMS – Student Portal • " + name);
 
     auto* central = new QWidget;
     auto* h = new QHBoxLayout(central);
@@ -33,7 +35,7 @@ MainWindow::MainWindow(University& u, QWidget* parent)
 
     // Brand
     auto* brandRow = new QHBoxLayout;
-    auto* brandIcon = new QLabel("🏛");
+    auto* brandIcon = new QLabel("🎓");
     brandIcon->setFixedSize(36, 36);
     brandIcon->setAlignment(Qt::AlignCenter);
     brandIcon->setStyleSheet(
@@ -43,7 +45,7 @@ MainWindow::MainWindow(University& u, QWidget* parent)
     brandColV->setContentsMargins(0, 0, 0, 0); brandColV->setSpacing(0);
     auto* brandName = new QLabel("UDRMS");
     brandName->setObjectName("Brand");
-    auto* brandSub  = new QLabel("ENSIA 2025–26");
+    auto* brandSub  = new QLabel("Student Portal");
     brandSub->setObjectName("BrandSub");
     brandColV->addWidget(brandName);
     brandColV->addWidget(brandSub);
@@ -53,42 +55,30 @@ MainWindow::MainWindow(University& u, QWidget* parent)
     sideLay->addSpacing(20);
 
     // Section label
-    auto* menuLbl = new QLabel("MAIN MENU");
+    auto* menuLbl = new QLabel("NAVIGATION");
     menuLbl->setObjectName("SideMenuLabel");
     sideLay->addWidget(menuLbl);
 
     // Pages
     stack = new QStackedWidget;
-    auto* dashboard = new DashboardPage(uni);
-    dashboard->setNavigator([this](int index){ switchPage(index); });
-    stack->addWidget(dashboard);                  // 0
-    stack->addWidget(new DormitoriesPage(uni));                // 1
-    stack->addWidget(new RoomsPage(uni));                      // 2
-    stack->addWidget(new StudentsPage(uni));                   // 3
-    stack->addWidget(new RestaurantPage(uni));                 // 4
-    stack->addWidget(new MealBookingPage(uni));                // 5
-    stack->addWidget(new ActivityPage(uni, "Sports"));         // 6
-    stack->addWidget(new HealthPage(uni));                     // 7
-    stack->addWidget(new ActivityPage(uni, "Cultural"));       // 8
+    stack->addWidget(new StudentDashboardPage(uni, studentId));     // 0
+    stack->addWidget(new StudentEventsPage(uni, studentId));        // 1
+    stack->addWidget(new StudentMealBookingPage(uni, studentId));   // 2
+    stack->addWidget(new StudentHealthPage(uni, studentId));        // 3
 
     struct NavItem { const char* icon; const char* label; };
     NavItem items[] = {
-        {"📊", "Dashboard"},
-        {"🏢", "Dormitories"},
-        {"🛏", "Rooms"},
-        {"👥", "Students"},
-        {"🍽", "Restaurant"},
-        {"📅", "Meal Booking"},
-        {"⚽", "Sports Activities"},
+        {"📊", "My Dashboard"},
+        {"🎯", "Events"},
+        {"🍽", "Meal Booking"},
         {"🏥", "Health Clinic"},
-        {"🎭", "Cultural Activities"},
     };
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 4; ++i)
         addNav(sideLay, items[i].icon, items[i].label, i);
 
     sideLay->addStretch();
 
-    // Admin footer
+    // Logout button
     auto* sep = new QFrame;
     sep->setFrameShape(QFrame::HLine);
     sep->setStyleSheet("color: rgba(255,255,255,0.08);");
@@ -106,24 +96,26 @@ MainWindow::MainWindow(University& u, QWidget* parent)
         "QPushButton:hover { background: rgba(248,113,113,0.12); }");
     sideLay->addWidget(logoutBtn);
     sideLay->addSpacing(8);
-    connect(logoutBtn, &QPushButton::clicked, this, [this]{ emit loggedOut(); });
 
-    auto* adminRow = new QHBoxLayout;
-    auto* adminAv  = new QLabel("👤");
-    adminAv->setFixedSize(34, 34);
-    adminAv->setAlignment(Qt::AlignCenter);
-    adminAv->setStyleSheet(
+    // Student info at bottom
+    auto* studentRow = new QHBoxLayout;
+    auto* studentAv  = new QLabel("👤");
+    studentAv->setFixedSize(34, 34);
+    studentAv->setAlignment(Qt::AlignCenter);
+    studentAv->setStyleSheet(
         "background:#2D3154; border-radius:10px; font-size:16px;");
-    auto* adminCol  = new QWidget;
-    auto* adminColV = new QVBoxLayout(adminCol);
-    adminColV->setContentsMargins(0, 0, 0, 0); adminColV->setSpacing(1);
-    auto* adminName = new QLabel("Admin User"); adminName->setObjectName("SideAdminName");
-    auto* adminRole = new QLabel("System Admin"); adminRole->setObjectName("SideAdminRole");
-    adminColV->addWidget(adminName);
-    adminColV->addWidget(adminRole);
-    adminRow->addWidget(adminAv);
-    adminRow->addWidget(adminCol, 1);
-    sideLay->addLayout(adminRow);
+    auto* studentCol  = new QWidget;
+    auto* studentColV = new QVBoxLayout(studentCol);
+    studentColV->setContentsMargins(0, 0, 0, 0); studentColV->setSpacing(1);
+    auto* studentNameW = new QLabel(name);
+    studentNameW->setObjectName("SideAdminName");
+    auto* studentRoleW = new QLabel("Student");
+    studentRoleW->setObjectName("SideAdminRole");
+    studentColV->addWidget(studentNameW);
+    studentColV->addWidget(studentRoleW);
+    studentRow->addWidget(studentAv);
+    studentRow->addWidget(studentCol, 1);
+    sideLay->addLayout(studentRow);
 
     // ── Content (scrollable) ─────────────────────────────────────────
     auto* scroll = new QScrollArea;
@@ -137,10 +129,15 @@ MainWindow::MainWindow(University& u, QWidget* parent)
 
     if (!navButtons.isEmpty()) navButtons[0]->setChecked(true);
     switchPage(0);
+
+    // Connections
+    connect(logoutBtn, &QPushButton::clicked, this, [this]{
+        emit loggedOut();
+    });
 }
 
-void MainWindow::addNav(QVBoxLayout* sideLay, const QString& icon,
-                        const QString& label, int index)
+void StudentWindow::addNav(QVBoxLayout* sideLay, const QString& icon,
+                           const QString& label, int index)
 {
     auto* btn = new QPushButton("  " + icon + "   " + label);
     btn->setObjectName("NavBtn");
@@ -152,15 +149,14 @@ void MainWindow::addNav(QVBoxLayout* sideLay, const QString& icon,
     navButtons.append(btn);
 }
 
-void MainWindow::switchPage(int index) {
+void StudentWindow::switchPage(int index) {
     for (int i = 0; i < navButtons.size(); ++i)
         navButtons[i]->setChecked(i == index);
     stack->setCurrentIndex(index);
-    if (auto* r = dynamic_cast<Refreshable*>(stack->widget(index)))
+    if (auto* r = dynamic_cast<StudentRefreshable*>(stack->widget(index)))
         r->refresh();
 }
 
-void MainWindow::closeEvent(QCloseEvent* event) {
-    uni.saveToFiles("data");
-    event->accept();
+Student* StudentWindow::currentStudent() {
+    return uni.findStudent(studentId.toStdString());
 }
