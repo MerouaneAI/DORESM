@@ -151,7 +151,7 @@ LoginWindow::LoginWindow(University& u, QWidget* parent)
     cardLay->addStretch();
 
     // Role hint
-    auto* hint = new QLabel("Admin: admin / admin  •  Student: full name / ID");
+    auto* hint = new QLabel("Admin: admin / admin  •  Staff: staff / staff\nDorm: dorm name / dorm ID  •  Student: full name / ID");
     hint->setAlignment(Qt::AlignCenter);
     hint->setStyleSheet("font-size: 11px; color: #9CA3AF; background: transparent;");
     cardLay->addWidget(hint);
@@ -178,6 +178,21 @@ void LoginWindow::attemptLogin() {
     if (user == "admin" && pass == "admin") {
         emit adminLoggedIn();
         return;
+    }
+
+    // Staff login
+    if (user.compare("staff", Qt::CaseInsensitive) == 0 && pass == "staff") {
+        emit staffLoggedIn();
+        return;
+    }
+
+    // Dorm admin login: username = dormitory name, password = dorm ID
+    for (const auto& d : uni.getDormitories()) {
+        if (QString::fromStdString(d.getName()).compare(user, Qt::CaseInsensitive) == 0 &&
+            QString::fromStdString(d.getId()) == pass) {
+            emit dormAdminLoggedIn(QString::fromStdString(d.getId()));
+            return;
+        }
     }
 
     // Student login: username = full name, password = student ID

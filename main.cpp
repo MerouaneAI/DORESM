@@ -5,6 +5,8 @@
 #include "gui/LoginWindow.h"
 #include "gui/MainWindow.h"
 #include "gui/StudentWindow.h"
+#include "gui/DormAdminWindow.h"
+#include "gui/StaffWindow.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
@@ -16,16 +18,23 @@ int main(int argc, char* argv[]) {
     else
         uni.seedSampleData();
 
-    LoginWindow*   loginWin   = nullptr;
-    MainWindow*    adminWin   = nullptr;
-    StudentWindow* studentWin = nullptr;
+    // Clean up expired meal bookings and past appointments
+    uni.cleanupExpired();
+
+    LoginWindow*      loginWin      = nullptr;
+    MainWindow*       adminWin      = nullptr;
+    StudentWindow*    studentWin    = nullptr;
+    DormAdminWindow*  dormAdminWin  = nullptr;
+    StaffWindow*      staffWin      = nullptr;
 
     std::function<void()> showLogin;
 
     showLogin = [&]() {
-        if (adminWin)   { adminWin->close();   delete adminWin;   adminWin = nullptr; }
-        if (studentWin) { studentWin->close();  delete studentWin; studentWin = nullptr; }
-        if (loginWin)   { loginWin->close();    delete loginWin;   loginWin = nullptr; }
+        if (adminWin)      { adminWin->close();      delete adminWin;      adminWin = nullptr; }
+        if (studentWin)    { studentWin->close();     delete studentWin;    studentWin = nullptr; }
+        if (dormAdminWin)  { dormAdminWin->close();   delete dormAdminWin;  dormAdminWin = nullptr; }
+        if (staffWin)      { staffWin->close();       delete staffWin;      staffWin = nullptr; }
+        if (loginWin)      { loginWin->close();       delete loginWin;      loginWin = nullptr; }
 
         loginWin = new LoginWindow(uni);
         loginWin->resize(900, 600);
@@ -49,6 +58,30 @@ int main(int argc, char* argv[]) {
             studentWin->show();
 
             QObject::connect(studentWin, &StudentWindow::loggedOut, [&]() {
+                uni.saveToFiles("data");
+                showLogin();
+            });
+        });
+
+        QObject::connect(loginWin, &LoginWindow::dormAdminLoggedIn, [&](const QString& dormId) {
+            loginWin->hide();
+            dormAdminWin = new DormAdminWindow(uni, dormId.toStdString());
+            dormAdminWin->resize(1200, 760);
+            dormAdminWin->show();
+
+            QObject::connect(dormAdminWin, &DormAdminWindow::loggedOut, [&]() {
+                uni.saveToFiles("data");
+                showLogin();
+            });
+        });
+
+        QObject::connect(loginWin, &LoginWindow::staffLoggedIn, [&]() {
+            loginWin->hide();
+            staffWin = new StaffWindow(uni);
+            staffWin->resize(1100, 700);
+            staffWin->show();
+
+            QObject::connect(staffWin, &StaffWindow::loggedOut, [&]() {
                 uni.saveToFiles("data");
                 showLogin();
             });

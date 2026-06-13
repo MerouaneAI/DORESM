@@ -153,7 +153,7 @@ void University::saveToFiles(const std::string& dir) const {
     std::ofstream fb(dir + "/bookings.txt");
     for (const auto& b : bookings)
         fb << b.studentId << '|' << b.date << '|' << mealTypeToString(b.meal)
-           << '|' << (b.confirmed ? 1 : 0) << '\n';
+           << '|' << (b.confirmed ? 1 : 0) << '|' << (b.served ? 1 : 0) << '\n';
 
     std::ofstream fa(dir + "/activities.txt");
     for (const auto& a : activities) {
@@ -225,7 +225,9 @@ void University::loadFromFiles(const std::string& dir) {
     while (std::getline(fb, line)) {
         if (line.empty()) continue;
         auto t = split(line, '|');
-        bookings.emplace_back(t[0], t[1], mealTypeFromString(t[2]), t.size() > 3 && t[3] == "1");
+        bool conf = t.size() > 3 && t[3] == "1";
+        bool serv = t.size() > 4 && t[4] == "1";
+        bookings.emplace_back(t[0], t[1], mealTypeFromString(t[2]), conf, serv);
     }
 
     std::ifstream fa(dir + "/activities.txt");
@@ -327,4 +329,37 @@ void University::removeDormitory(const std::string& id) {
             s.clearAccommodation();
     dormitories.erase(std::remove_if(dormitories.begin(), dormitories.end(),
         [&](const Dormitory& x){ return x.getId() == id; }), dormitories.end());
+}
+
+// ---------- Time-based cleanup ----------
+void University::cleanupExpired() {
+    // Get today's date as YYYY-MM-DD string
+    std::time_t now = std::time(nullptr);
+    char today[16] = "";
+    char nowTime[16] = "";
+    if (const std::tm* tm = std::localtime(&now)) {
+        std::strftime(today, sizeof(today), "%Y-%m-%d", tm);
+        std::strftime(nowTime, sizeof(nowTime), "%H:%M", tm);
+    }
+    std::string todayStr(today);
+    std::string nowTimeStr(nowTime);
+
+    // Remove meal bookings whose date has passed (strictly before today)
+    bookings.erase(
+        std::remove_if(bookings.begin(), bookings.end(),
+            [&](const MealBooking& b) { return b.date < todayStr; }),
+        bookings.end());
+
+    // Remove appointments whose date has passed
+    auto& apts = clinic.getAppointments();
+    apts.erase(
+        std::remove_if(apts.begin(), apts.end(),
+            [&](const Appointment& a) {
+                // Past date → remove
+                if (a.date < todayStr) return true;
+                // Same date but time has passed → remove
+                if (a.date == todayStr && a.time < nowTimeStr) return true;
+                return false;
+            }),
+        apts.end());
 }

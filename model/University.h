@@ -81,4 +81,7 @@ void logActivity(const std::string& emoji, const std::string& text);
 
 // ----- Dormitories (new) -----
 void removeDormitory(const std::string& id);   // unassigns residents, then deletes
+
+// ----- Time-based cleanup -----
+void cleanupExpired();   // removes past meal bookings and past appointments
 };

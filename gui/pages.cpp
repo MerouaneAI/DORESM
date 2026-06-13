@@ -295,6 +295,7 @@ if (logEntries.empty()) {
     std::vector<Ev> evs;
     const QString today = QDate::currentDate().toString("yyyy-MM-dd");
 
+    // Health clinic appointments
     for (const auto& a : uni.getClinic().getAppointments()) {
         if (a.status != "Scheduled") continue;
         QString date = QString::fromStdString(a.date);
@@ -304,14 +305,22 @@ if (logEntries.empty()) {
                                    QString::fromStdString(uni.studentName(a.studentId))),
             "🏥" });
     }
-    for (const auto& b : uni.getBookings()) {
-        QString date = QString::fromStdString(b.date);
-        if (date < today) continue;
-        evs.push_back({ date,
-            QString("%1 – %2").arg(QString::fromStdString(mealTypeToString(b.meal)),
-                                   QString::fromStdString(uni.studentName(b.studentId))),
-            "📅" });
+
+    // Sports and Cultural activities
+    for (const auto& a : uni.getActivities()) {
+        QString sched = QString::fromStdString(a->getSchedule());
+        QString cat = QString::fromStdString(a->category());
+        QString actEmoji = (cat == "Sports") ? "⚽" : "🎭";
+        int approved = 0;
+        for (const auto& e : a->getEnrollments())
+            if (e.status == "Approved") ++approved;
+        evs.push_back({ today,
+            QString("%1 – %2 (%3 enrolled)").arg(
+                QString::fromStdString(a->getName()), sched,
+                QString::number(approved)),
+            actEmoji });
     }
+
     std::sort(evs.begin(), evs.end(),
               [](const Ev& a, const Ev& b){ return a.date < b.date; });
 

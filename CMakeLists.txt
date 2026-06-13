@@ -30,6 +30,10 @@ add_executable(udrms WIN32
     gui/LoginWindow.cpp
     gui/StudentWindow.cpp
     gui/StudentPages.cpp
+    gui/DormAdminWindow.cpp
+    gui/DormAdminPages.cpp
+    gui/StaffWindow.cpp
+    gui/StaffPages.cpp
 )
 
 target_include_directories(udrms PRIVATE ${CMAKE_SOURCE_DIR})

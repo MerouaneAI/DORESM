@@ -13,6 +13,8 @@ public:
 signals:
     void adminLoggedIn();
     void studentLoggedIn(const QString& studentId);
+    void dormAdminLoggedIn(const QString& dormId);
+    void staffLoggedIn();
 private:
     University& uni;
     QLineEdit* usernameEdit;
