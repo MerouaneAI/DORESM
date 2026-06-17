@@ -15,7 +15,7 @@
 MainWindow::MainWindow(University& u, QWidget* parent)
     : QMainWindow(parent), uni(u)
 {
-    setWindowTitle("UDRMS – University Dormitory & Restaurant Management System");
+    setWindowTitle("DORESM – Dormitory & Restaurant Management System");
 
     auto* central = new QWidget;
     auto* h = new QHBoxLayout(central);
@@ -41,9 +41,9 @@ MainWindow::MainWindow(University& u, QWidget* parent)
     auto* brandCol = new QWidget;
     auto* brandColV = new QVBoxLayout(brandCol);
     brandColV->setContentsMargins(0, 0, 0, 0); brandColV->setSpacing(0);
-    auto* brandName = new QLabel("UDRMS");
+    auto* brandName = new QLabel("DORESM");
     brandName->setObjectName("Brand");
-    auto* brandSub  = new QLabel("ENSIA 2025–26");
+    auto* brandSub  = new QLabel("University 2025–26");
     brandSub->setObjectName("BrandSub");
     brandColV->addWidget(brandName);
     brandColV->addWidget(brandSub);

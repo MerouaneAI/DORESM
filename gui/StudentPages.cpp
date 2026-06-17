@@ -1,5 +1,6 @@
 #include "gui/StudentPages.h"
 #include "gui/widgets.h"
+#include "gui/Validation.h"
 #include "model/University.h"
 #include "model/Activity.h"
 #include "model/WeeklyMenu.h"
@@ -423,7 +424,7 @@ void StudentHealthPage::refresh() {
         textCol->setSpacing(4);
         auto* reasonL = new QLabel(QString::fromStdString(apt.reason));
         reasonL->setStyleSheet("font-size: 15px; font-weight: 600; color: #111827; background: transparent;");
-        auto* dateL = new QLabel("📅 " + QString::fromStdString(apt.date) + "  🕐 " + QString::fromStdString(apt.time));
+        auto* dateL = new QLabel("📅 " + Validate::toDisplay(apt.date) + "  🕐 " + QString::fromStdString(apt.time));
         dateL->setStyleSheet("font-size: 13px; color: #6B7280; background: transparent;");
         textCol->addWidget(reasonL);
         textCol->addWidget(dateL);
@@ -458,24 +459,53 @@ void StudentHealthPage::refresh() {
 
 void StudentHealthPage::bookAppointmentDialog() {
     bool ok = false;
-    QString date = QInputDialog::getText(this, "Book Appointment", "Date (YYYY-MM-DD):",
-                                         QLineEdit::Normal, "2026-06-10", &ok);
-    if (!ok || date.trimmed().isEmpty()) return;
 
-    QString time = QInputDialog::getText(this, "Book Appointment", "Time (HH:MM):",
-                                         QLineEdit::Normal, "09:00", &ok);
-    if (!ok || time.trimmed().isEmpty()) return;
+    // Date validation
+    QString date;
+    QDate parsedDate;
+    while (true) {
+        date = QInputDialog::getText(this, "Book Appointment",
+            "Date (dd-mm-yyyy):",
+            QLineEdit::Normal,
+            date.isEmpty() ? Validate::todayUserFormat() : date, &ok);
+        if (!ok) return;
+        QString err = Validate::futureDate(date, &parsedDate);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Date", err);
+    }
 
-    QString reason = QInputDialog::getText(this, "Book Appointment", "Reason:",
-                                           QLineEdit::Normal, "", &ok);
-    if (!ok || reason.trimmed().isEmpty()) return;
+    // Time validation
+    QString time;
+    while (true) {
+        time = QInputDialog::getText(this, "Book Appointment",
+            "Time (HH:MM, 24-hour format):",
+            QLineEdit::Normal,
+            time.isEmpty() ? "09:00" : time, &ok);
+        if (!ok) return;
+        QString err = Validate::time(time);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Time", err);
+    }
 
+    // Reason validation
+    QString reason;
+    while (true) {
+        reason = QInputDialog::getText(this, "Book Appointment",
+            "Reason for appointment:",
+            QLineEdit::Normal, reason, &ok);
+        if (!ok) return;
+        QString err = Validate::notEmpty(reason, "Reason");
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Reason", err);
+    }
+
+    QString internalDate = Validate::toInternal(date);
     uni.getClinic().schedule(
-        Appointment(studentId.toStdString(), date.toStdString(),
-                    time.toStdString(), reason.toStdString()));
+        Appointment(studentId.toStdString(), internalDate.toStdString(),
+                    time.trimmed().toStdString(), reason.trimmed().toStdString()));
 
     uni.logActivity("🏥", "Student " + uni.studentName(studentId.toStdString()) +
-                    " booked appointment for " + date.toStdString());
+                    " booked appointment for " + internalDate.toStdString());
 
     QMessageBox::information(this, "Booked", "Your appointment has been booked successfully!");
     refresh();
@@ -550,7 +580,7 @@ void StudentMealBookingPage::refresh() {
         textCol->setSpacing(4);
         auto* mealL = new QLabel(QString::fromStdString(mealStr));
         mealL->setStyleSheet("font-size: 15px; font-weight: 600; color: #111827; background: transparent;");
-        auto* dateL = new QLabel("📅 " + QString::fromStdString(bk.date));
+        auto* dateL = new QLabel("📅 " + Validate::toDisplay(bk.date));
         dateL->setStyleSheet("font-size: 13px; color: #6B7280; background: transparent;");
         textCol->addWidget(mealL);
         textCol->addWidget(dateL);
@@ -580,19 +610,31 @@ void StudentMealBookingPage::refresh() {
 
 void StudentMealBookingPage::bookMealDialog() {
     bool ok = false;
-    QString date = QInputDialog::getText(this, "Book Meal", "Date (YYYY-MM-DD):",
-                                         QLineEdit::Normal, "2026-06-10", &ok);
-    if (!ok || date.trimmed().isEmpty()) return;
+
+    // Date validation
+    QString date;
+    QDate parsedDate;
+    while (true) {
+        date = QInputDialog::getText(this, "Book Meal",
+            "Date (dd-mm-yyyy):",
+            QLineEdit::Normal,
+            date.isEmpty() ? Validate::todayUserFormat() : date, &ok);
+        if (!ok) return;
+        QString err = Validate::futureDate(date, &parsedDate);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Date", err);
+    }
 
     QString meal = QInputDialog::getItem(this, "Book Meal", "Meal:",
                                          {"Breakfast", "Lunch", "Dinner"}, 1, false, &ok);
     if (!ok) return;
 
     try {
-        uni.bookMeal(MealBooking(studentId.toStdString(), date.toStdString(),
+        QString internalDate = Validate::toInternal(date);
+        uni.bookMeal(MealBooking(studentId.toStdString(), internalDate.toStdString(),
                                   mealTypeFromString(meal.toStdString())));
         uni.logActivity("🍽", uni.studentName(studentId.toStdString()) +
-                        " booked " + meal.toStdString() + " on " + date.toStdString());
+                        " booked " + meal.toStdString() + " on " + internalDate.toStdString());
         QMessageBox::information(this, "Booked", "Your meal has been booked successfully!");
         refresh();
     } catch (const std::exception& e) {

@@ -50,8 +50,8 @@ QTableWidget* makeStaffTable(const QStringList& cols) {
 //  Staff Dashboard
 // ═══════════════════════════════════════════════════════════════════════════════
 
-StaffDashboardPage::StaffDashboardPage(University& u, QWidget* parent)
-    : QWidget(parent), uni(u)
+StaffDashboardPage::StaffDashboardPage(University& u, const std::string& dId, QWidget* parent)
+    : QWidget(parent), uni(u), dormId(dId)
 {
     root = new QVBoxLayout(this);
     root->setContentsMargins(28, 24, 28, 24);
@@ -62,14 +62,19 @@ StaffDashboardPage::StaffDashboardPage(University& u, QWidget* parent)
 void StaffDashboardPage::refresh() {
     clearStaffLayout(root);
 
-    root->addWidget(pageHeader("Good morning, Staff 👋",
-                               "Here's your maintenance and meal service overview."));
+    Dormitory* dorm = uni.findDormitory(dormId);
+    QString dormName = dorm ? QString::fromStdString(dorm->getName()) : QString::fromStdString(dormId);
+    root->addWidget(pageHeader("Good morning, Staff " + QString::fromStdString(dormId) + " 👋",
+                               "Here's your maintenance and meal service overview for " + dormName + "."));
 
-    // ── Count stats ──────────────────────────────────────────────────
-    int maintRooms = 0;
-    for (const auto& d : uni.getDormitories())
-        for (const auto& r : d.getRooms())
+    // ── Count stats (scoped to this dormitory) ───────────────────────
+    int maintRooms = 0, totalRms = 0;
+    if (dorm) {
+        for (const auto& r : dorm->getRooms()) {
+            ++totalRms;
             if (r.isUnderMaintenance()) ++maintRooms;
+        }
+    }
 
     int dayOfWeek = std::max(0, QDate::currentDate().dayOfWeek() - 1);
     int mealsServed = uni.getWeeklyMenu().days[dayOfWeek].mealsServed;
@@ -91,8 +96,8 @@ void StaffDashboardPage::refresh() {
                                 "Meals Served Today", "Total served", "#DCFCE7"));
     statRow->addWidget(statCard("📅", QString::number(todayBookings),
                                 "Today's Bookings", QString("%1 unserved").arg(todayUnserved), "#EEF1FF"));
-    statRow->addWidget(statCard("🏢", QString::number((int)uni.getDormitories().size()),
-                                "Dormitories", "Total on campus", "#FCE7F3"));
+    statRow->addWidget(statCard("🛏", QString::number(totalRms),
+                                "Rooms", dormName, "#FCE7F3"));
     root->addLayout(statRow);
 
     // ── Today's Menu preview ─────────────────────────────────────────
@@ -111,15 +116,15 @@ void StaffDashboardPage::refresh() {
     menuLay->addWidget(menuRow("🌙", "Dinner",    QString::fromStdString(dailyMenu.dinner)));
     root->addWidget(menuCard);
 
-    // ── Maintenance summary ──────────────────────────────────────────
+    // ── Maintenance summary (scoped to this dormitory) ───────────────
     if (maintRooms > 0) {
         auto* maintTitle = new QLabel("🔧  Rooms Awaiting Repair");
         maintTitle->setStyleSheet("font-size:16px; font-weight:700; color:#111827;");
         root->addWidget(maintTitle);
 
         int shown = 0;
-        for (const auto& d : uni.getDormitories()) {
-            for (const auto& r : d.getRooms()) {
+        if (dorm) {
+            for (const auto& r : dorm->getRooms()) {
                 if (!r.isUnderMaintenance()) continue;
                 if (++shown > 5) break;
 
@@ -137,7 +142,7 @@ void StaffDashboardPage::refresh() {
                 info->setSpacing(2);
                 auto* roomLbl = new QLabel("Room " + QString::fromStdString(r.getNumber()));
                 roomLbl->setStyleSheet("font-size:14px; font-weight:600; color:#111827;");
-                auto* dormLbl = new QLabel(QString::fromStdString(d.getName()));
+                auto* dormLbl = new QLabel(dormName);
                 dormLbl->setStyleSheet("font-size:12px; color:#6B7280;");
                 info->addWidget(roomLbl);
                 info->addWidget(dormLbl);
@@ -151,7 +156,6 @@ void StaffDashboardPage::refresh() {
                 cardLay->addWidget(statusL, 0, Qt::AlignCenter);
                 root->addWidget(card);
             }
-            if (shown > 5) break;
         }
     }
 
@@ -162,8 +166,8 @@ void StaffDashboardPage::refresh() {
 //  Staff Maintenance Page
 // ═══════════════════════════════════════════════════════════════════════════════
 
-StaffMaintenancePage::StaffMaintenancePage(University& u, QWidget* parent)
-    : QWidget(parent), uni(u)
+StaffMaintenancePage::StaffMaintenancePage(University& u, const std::string& dId, QWidget* parent)
+    : QWidget(parent), uni(u), dormId(dId)
 {
     root = new QVBoxLayout(this);
     root->setContentsMargins(28, 24, 28, 24);
@@ -174,11 +178,16 @@ StaffMaintenancePage::StaffMaintenancePage(University& u, QWidget* parent)
 void StaffMaintenancePage::refresh() {
     clearStaffLayout(root);
 
-    // Count maintenance rooms
-    int maintRooms = 0;
-    for (const auto& d : uni.getDormitories())
-        for (const auto& r : d.getRooms())
+    // Count maintenance rooms (scoped to this dormitory)
+    Dormitory* dorm = uni.findDormitory(dormId);
+    QString dormName = dorm ? QString::fromStdString(dorm->getName()) : QString::fromStdString(dormId);
+    int maintRooms = 0, totalRms = 0;
+    if (dorm) {
+        for (const auto& r : dorm->getRooms()) {
+            ++totalRms;
             if (r.isUnderMaintenance()) ++maintRooms;
+        }
+    }
 
     auto* head = new QHBoxLayout;
     head->addWidget(pageHeader("🔧  Room Maintenance",
@@ -189,8 +198,8 @@ void StaffMaintenancePage::refresh() {
     auto* sRow = new QHBoxLayout; sRow->setSpacing(16);
     sRow->addWidget(statCard("🔧", QString::number(maintRooms),
                              "Under Maintenance", "Awaiting repair", "#FEF3C7", "#D97706"));
-    sRow->addWidget(statCard("🛏", QString::number(uni.totalRooms()),
-                             "Total Rooms", "All dormitories", "#EEF1FF"));
+    sRow->addWidget(statCard("🛏", QString::number(totalRms),
+                             "Total Rooms", dormName, "#EEF1FF"));
     sRow->addStretch();
     root->addLayout(sRow);
 
@@ -200,8 +209,8 @@ void StaffMaintenancePage::refresh() {
         empty->setStyleSheet("font-size:14px; color:#16A34A; padding:20px 0;");
         root->addWidget(empty);
     } else {
-        for (auto& d : uni.getDormitories()) {
-            for (auto& r : d.getRooms()) {
+        if (dorm) {
+            for (auto& r : dorm->getRooms()) {
                 if (!r.isUnderMaintenance()) continue;
 
                 auto* card = makeCard();
@@ -218,7 +227,7 @@ void StaffMaintenancePage::refresh() {
                 textCol->setSpacing(4);
                 auto* roomLbl = new QLabel("Room " + QString::fromStdString(r.getNumber()));
                 roomLbl->setStyleSheet("font-size:16px; font-weight:700; color:#111827; background:transparent;");
-                auto* dormLbl = new QLabel("🏢  " + QString::fromStdString(d.getName()));
+                auto* dormLbl = new QLabel("🏢  " + dormName);
                 dormLbl->setStyleSheet("font-size:13px; color:#6B7280; background:transparent;");
                 auto* typeLbl = new QLabel(QString::fromStdString(r.getType()) +
                     "  ·  Capacity: " + QString::number(r.getCapacity()));
@@ -234,16 +243,16 @@ void StaffMaintenancePage::refresh() {
                     " padding:10px 24px; font-size:13px; font-weight:600; }"
                     "QPushButton:hover { background:#059669; }");
 
-                QString dormId = QString::fromStdString(d.getId());
+                QString dormIdQ = QString::fromStdString(dormId);
                 QString roomNo = QString::fromStdString(r.getNumber());
-                connect(fixBtn, &QPushButton::clicked, this, [this, dormId, roomNo]() {
-                    Dormitory* dorm = uni.findDormitory(dormId.toStdString());
-                    if (!dorm) return;
-                    Room* room = dorm->findRoom(roomNo.toStdString());
+                connect(fixBtn, &QPushButton::clicked, this, [this, dormIdQ, roomNo]() {
+                    Dormitory* dm = uni.findDormitory(dormIdQ.toStdString());
+                    if (!dm) return;
+                    Room* room = dm->findRoom(roomNo.toStdString());
                     if (!room) return;
                     room->setMaintenance(false);
-                    uni.logActivity("✅", "Staff fixed room " + roomNo.toStdString() +
-                                    " in " + dorm->getName());
+                    uni.logActivity("✅", "Staff " + dormIdQ.toStdString() + " fixed room " + roomNo.toStdString() +
+                                    " in " + dm->getName());
                     QMessageBox::information(this, "Fixed",
                         "Room " + roomNo + " has been marked as fixed and is now available.");
                     refresh();
@@ -264,8 +273,8 @@ void StaffMaintenancePage::refresh() {
 //  Staff Restaurant Page (serve meals)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-StaffRestaurantPage::StaffRestaurantPage(University& u, QWidget* parent)
-    : QWidget(parent), uni(u)
+StaffRestaurantPage::StaffRestaurantPage(University& u, const std::string& dId, QWidget* parent)
+    : QWidget(parent), uni(u), dormId(dId)
 {
     root = new QVBoxLayout(this);
     root->setContentsMargins(28, 24, 28, 24);

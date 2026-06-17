@@ -26,7 +26,7 @@ private:
     std::vector<ActivityLogItem> activityLog;
     WeeklyMenu weeklyMenu;
 public:
-    explicit University(std::string name = "ENSIA") : name(std::move(name)) {}
+    explicit University(std::string name = "University") : name(std::move(name)) {}
 
     const std::string& getName() const { return name; }
 

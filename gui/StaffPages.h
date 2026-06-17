@@ -1,5 +1,6 @@
 #pragma once
 #include <QWidget>
+#include <string>
 
 class University;
 class QVBoxLayout;
@@ -11,35 +12,38 @@ public:
     virtual ~StaffRefreshable() = default;
 };
 
-// Dashboard — small overview with maintenance + meal stats
+// Dashboard — small overview with maintenance + meal stats (scoped to one dormitory)
 class StaffDashboardPage : public QWidget, public StaffRefreshable {
     Q_OBJECT
 public:
-    explicit StaffDashboardPage(University& uni, QWidget* parent = nullptr);
+    explicit StaffDashboardPage(University& uni, const std::string& dormId, QWidget* parent = nullptr);
     void refresh() override;
 private:
     University& uni;
+    std::string dormId;
     QVBoxLayout* root;
 };
 
-// Maintenance — rooms under maintenance with "Mark Fixed" action
+// Maintenance — rooms under maintenance with "Mark Fixed" action (scoped to one dormitory)
 class StaffMaintenancePage : public QWidget, public StaffRefreshable {
     Q_OBJECT
 public:
-    explicit StaffMaintenancePage(University& uni, QWidget* parent = nullptr);
+    explicit StaffMaintenancePage(University& uni, const std::string& dormId, QWidget* parent = nullptr);
     void refresh() override;
 private:
     University& uni;
+    std::string dormId;
     QVBoxLayout* root;
 };
 
-// Restaurant — today's menu + serve meals for bookings
+// Restaurant — today's menu + serve meals for bookings (scoped to one dormitory)
 class StaffRestaurantPage : public QWidget, public StaffRefreshable {
     Q_OBJECT
 public:
-    explicit StaffRestaurantPage(University& uni, QWidget* parent = nullptr);
+    explicit StaffRestaurantPage(University& uni, const std::string& dormId, QWidget* parent = nullptr);
     void refresh() override;
 private:
     University& uni;
+    std::string dormId;
     QVBoxLayout* root;
 };

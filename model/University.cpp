@@ -173,6 +173,63 @@ void University::saveToFiles(const std::string& dir) const {
     for (const auto& ap : clinic.getAppointments())
         fc << ap.studentId << '|' << ap.date << '|' << ap.time << '|'
            << ap.reason << '|' << ap.status << '\n';
+
+    // ── Auto-generate credentials.txt ────────────────────────────────
+    std::ofstream cr(dir + "/credentials.txt");
+    cr << "================================================================================\n";
+    cr << "                    DORESM - User Credentials Reference\n";
+    cr << "                    University Dormitory & Restaurant\n";
+    cr << "                         Management System\n";
+    cr << "================================================================================\n\n";
+    cr << "This file is auto-generated each time the application saves data.\n";
+    cr << "It lists all valid login credentials for every user role.\n\n";
+
+    cr << std::string(80, '-') << "\n";
+    cr << "  ROLE: ADMIN\n";
+    cr << std::string(80, '-') << "\n";
+    cr << "  Username:  admin\n";
+    cr << "  Password:  admin\n\n";
+
+    cr << std::string(80, '-') << "\n";
+    cr << "  ROLE: STAFF (one per dormitory)\n";
+    cr << "  Login with: Staff X (case-insensitive) / staffX  where X = dormitory ID\n";
+    cr << std::string(80, '-') << "\n";
+    for (const auto& d : dormitories) {
+        std::string staffUser = "Staff " + d.getId();
+        std::string staffPass = "staff" + d.getId();
+        cr << "  Username:  " << staffUser;
+        std::string pad(std::max(1, 25 - static_cast<int>(staffUser.size())), ' ');
+        cr << pad << "Password:  " << staffPass << "\n";
+    }
+    cr << "\n";
+
+    cr << std::string(80, '-') << "\n";
+    cr << "  ROLE: DORMITORY ADMIN\n";
+    cr << "  Login with: dormitory name (case-insensitive) / dormitory ID\n";
+    cr << std::string(80, '-') << "\n";
+    for (const auto& d : dormitories) {
+        cr << "  Username:  " << d.getName();
+        // Pad to align password column
+        std::string pad(std::max(1, 25 - static_cast<int>(d.getName().size())), ' ');
+        cr << pad << "Password:  " << d.getId() << "\n";
+    }
+    cr << "\n";
+
+    cr << std::string(80, '-') << "\n";
+    cr << "  ROLE: STUDENT\n";
+    cr << "  Login with: full name (case-insensitive) / student ID\n";
+    cr << std::string(80, '-') << "\n";
+    for (const auto& s : students) {
+        cr << "  Username:  " << s.getFullName();
+        std::string pad(std::max(1, 25 - static_cast<int>(s.getFullName().size())), ' ');
+        cr << pad << "Password:  " << s.getId() << "\n";
+    }
+    cr << "\n";
+
+    cr << "================================================================================\n";
+    cr << "  NOTE: This file is regenerated automatically when data is saved.\n";
+    cr << "  New students and dormitories added through the app will appear here.\n";
+    cr << "================================================================================\n";
 }
 
 void University::loadFromFiles(const std::string& dir) {
@@ -288,16 +345,16 @@ void University::seedSampleData() {
         weeklyMenu.days[i].mealsServed = 0;
     }
 
-    addStudent(Student("S001", "Ahmed Benali",   2));
-    addStudent(Student("S002", "Sara Khelifi",   1));
-    addStudent(Student("S003", "Karim Boudiaf",  3));
-    addStudent(Student("S004", "Nour Hadj",      2));
-    addStudent(Student("S005", "Yacine Brahim",  4));
+    addStudent(Student("001", "Ahmed Benali",   2));
+    addStudent(Student("002", "Sara Khelifi",   1));
+    addStudent(Student("003", "Karim Boudiaf",  3));
+    addStudent(Student("004", "Nour Hadj",      2));
+    addStudent(Student("005", "Yacine Brahim",  4));
 
     try {
-        assignStudentToRoom("S001", "A", "A-101");
-        assignStudentToRoom("S002", "A", "A-101");
-        assignStudentToRoom("S003", "B", "B-202");
+        assignStudentToRoom("001", "A", "A-101");
+        assignStudentToRoom("002", "A", "A-101");
+        assignStudentToRoom("003", "B", "B-202");
     } catch (...) {}
 
     addActivity(std::make_unique<SportsActivity>("Football Training", "Mon & Wed 18:00", "Coach Reda"));
@@ -305,8 +362,8 @@ void University::seedSampleData() {
     addActivity(std::make_unique<CulturalActivity>("Film Evening",    "Sat 20:00",       "Auditorium"));
     addActivity(std::make_unique<CulturalActivity>("Book Club",       "Fri 16:00",       "Library"));
 
-    clinic.schedule(Appointment("S004", "2026-06-08", "10:00", "General check-up"));
-    bookMeal(MealBooking("S001", "2026-06-08", MealType::Dinner));
+    clinic.schedule(Appointment("004", "2026-06-08", "10:00", "General check-up"));
+    bookMeal(MealBooking("001", "2026-06-08", MealType::Dinner));
 }
 
 // ---------- Activity log ----------

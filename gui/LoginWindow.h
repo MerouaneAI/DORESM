@@ -14,7 +14,7 @@ signals:
     void adminLoggedIn();
     void studentLoggedIn(const QString& studentId);
     void dormAdminLoggedIn(const QString& dormId);
-    void staffLoggedIn();
+    void staffLoggedIn(const QString& dormId);
 private:
     University& uni;
     QLineEdit* usernameEdit;

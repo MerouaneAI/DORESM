@@ -1,5 +1,6 @@
 #include "gui/pages.h"
 #include "gui/widgets.h"
+#include "gui/Validation.h"
 #include "model/University.h"
 
 #include <QVBoxLayout>
@@ -111,7 +112,7 @@ void DashboardPage::refresh() {
 
     // Header
     root->addWidget(pageHeader("Good morning, Admin",
-                               "Here's what's happening at ENSIA today."));
+                               "Here's what's happening at University today."));
 
     // ── Stat row ──────────────────────────────────────────────────────
     auto* statRow = new QHBoxLayout;
@@ -485,12 +486,26 @@ connect(delDormBtn, &QPushButton::clicked, this, [this, dormId]{ deleteDormitory
 
 void DormitoriesPage::addDormitoryDialog() {
     bool ok = false;
-    QString id = QInputDialog::getText(this, "Add Dormitory", "Dormitory ID (e.g. E):",
-                                       QLineEdit::Normal, "", &ok);
-    if (!ok || id.trimmed().isEmpty()) return;
-    QString name = QInputDialog::getText(this, "Add Dormitory", "Name:",
-                                         QLineEdit::Normal, "Dormitory " + id.trimmed(), &ok);
-    if (!ok || name.trimmed().isEmpty()) return;
+    QString id;
+    while (true) {
+        id = QInputDialog::getText(this, "Add Dormitory",
+            "Dormitory ID (single uppercase letter, e.g. E):",
+            QLineEdit::Normal, id, &ok);
+        if (!ok) return;
+        QString err = Validate::dormitoryId(id);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Dormitory ID", err);
+    }
+    QString name;
+    name = "Dormitory " + id.trimmed();
+    while (true) {
+        name = QInputDialog::getText(this, "Add Dormitory", "Dormitory name:",
+            QLineEdit::Normal, name, &ok);
+        if (!ok) return;
+        QString err = Validate::dormitoryName(name);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Dormitory Name", err);
+    }
     try {
         uni.addDormitory(Dormitory(id.trimmed().toStdString(), name.trimmed().toStdString()));
         uni.logActivity("🏢", ("Added dormitory " + name.trimmed()).toStdString());
@@ -520,9 +535,16 @@ void DormitoriesPage::addRoomDialog(const QString& dormId) {
     auto* d = uni.findDormitory(dormId.toStdString());
     if (!d) return;
     bool ok = false;
-    QString num = QInputDialog::getText(this, "Add Room", "Room number:",
-                                        QLineEdit::Normal, "", &ok);
-    if (!ok || num.trimmed().isEmpty()) return;
+    QString num;
+    while (true) {
+        num = QInputDialog::getText(this, "Add Room",
+            QString("Room number (format: %1-NNN, e.g. %1-101):").arg(dormId),
+            QLineEdit::Normal, num.isEmpty() ? dormId + "-" : num, &ok);
+        if (!ok) return;
+        QString err = Validate::roomNumber(num, dormId);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Room Number", err);
+    }
     int cap = QInputDialog::getInt(this, "Add Room", "Capacity (1-3):", 1, 1, 3, 1, &ok);
     if (!ok) return;
     QString type = cap == 1 ? "Single" : cap == 2 ? "Double" : "Triple";
@@ -1193,9 +1215,16 @@ void StudentsPage::refresh() {
         if (!s) return;
         
         bool ok = false;
-        QString name = QInputDialog::getText(this, "Edit Student", "Full name:",
-                                             QLineEdit::Normal, QString::fromStdString(s->getFullName()), &ok);
-        if (!ok || name.trimmed().isEmpty()) return;
+        QString name = QString::fromStdString(s->getFullName());
+        while (true) {
+            name = QInputDialog::getText(this, "Edit Student",
+                "Full name (first and last name):",
+                QLineEdit::Normal, name, &ok);
+            if (!ok) return;
+            QString err = Validate::studentName(name);
+            if (err.isEmpty()) break;
+            QMessageBox::warning(this, "Invalid Name", err);
+        }
         
         int year = QInputDialog::getInt(this, "Edit Student", "Academic year (1-5):",
                                         s->getAcademicYear(), 1, 5, 1, &ok);
@@ -1229,17 +1258,31 @@ void StudentsPage::refresh() {
 
 void StudentsPage::addDialog() {
     bool ok = false;
-    QString id = QInputDialog::getText(this, "Add Student", "Student ID:",
-                                       QLineEdit::Normal, "", &ok);
-    if (!ok || id.trimmed().isEmpty()) return;
-    QString name = QInputDialog::getText(this, "Add Student", "Full name:",
-                                         QLineEdit::Normal, "", &ok);
-    if (!ok || name.trimmed().isEmpty()) return;
+    QString id;
+    while (true) {
+        id = QInputDialog::getText(this, "Add Student",
+            "Student ID (digits only, e.g. 006):",
+            QLineEdit::Normal, id, &ok);
+        if (!ok) return;
+        QString err = Validate::studentId(id);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Student ID", err);
+    }
+    QString name;
+    while (true) {
+        name = QInputDialog::getText(this, "Add Student",
+            "Full name (first and last name):",
+            QLineEdit::Normal, name, &ok);
+        if (!ok) return;
+        QString err = Validate::studentName(name);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Name", err);
+    }
     int year = QInputDialog::getInt(this, "Add Student", "Academic year (1-5):",
                                     1, 1, 5, 1, &ok);
     if (!ok) return;
     try {
-        uni.addStudent(Student(id.toStdString(), name.toStdString(), year));
+        uni.addStudent(Student(id.trimmed().toStdString(), name.trimmed().toStdString(), year));
         uni.logActivity("👥", "Added student " + name.trimmed().toStdString());
         refresh();
     } catch (const std::exception& e) {
@@ -1339,6 +1382,25 @@ void RestaurantPage::refresh() {
 }
 
 void RestaurantPage::saveMenu(QTableWidget* table) {
+    // Validate all fields before saving
+    const char* days[] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+    for (int i = 0; i < 7; ++i) {
+        auto* bfE = qobject_cast<QLineEdit*>(table->cellWidget(i, 1));
+        auto* lunE = qobject_cast<QLineEdit*>(table->cellWidget(i, 2));
+        auto* dinE = qobject_cast<QLineEdit*>(table->cellWidget(i, 3));
+        if (bfE) {
+            QString err = Validate::menuItem(bfE->text(), QString("%1 Breakfast").arg(days[i]));
+            if (!err.isEmpty()) { QMessageBox::warning(this, "Invalid Menu", err); return; }
+        }
+        if (lunE) {
+            QString err = Validate::menuItem(lunE->text(), QString("%1 Lunch").arg(days[i]));
+            if (!err.isEmpty()) { QMessageBox::warning(this, "Invalid Menu", err); return; }
+        }
+        if (dinE) {
+            QString err = Validate::menuItem(dinE->text(), QString("%1 Dinner").arg(days[i]));
+            if (!err.isEmpty()) { QMessageBox::warning(this, "Invalid Menu", err); return; }
+        }
+    }
     for (int i = 0; i < 7; ++i) {
         auto* bfE = qobject_cast<QLineEdit*>(table->cellWidget(i, 1));
         auto* lunE = qobject_cast<QLineEdit*>(table->cellWidget(i, 2));
@@ -1346,9 +1408,9 @@ void RestaurantPage::saveMenu(QTableWidget* table) {
         auto* servedE = qobject_cast<QSpinBox*>(table->cellWidget(i, 4));
         
         if (bfE && lunE && dinE && servedE) {
-            uni.getWeeklyMenu().days[i].breakfast = bfE->text().toStdString();
-            uni.getWeeklyMenu().days[i].lunch = lunE->text().toStdString();
-            uni.getWeeklyMenu().days[i].dinner = dinE->text().toStdString();
+            uni.getWeeklyMenu().days[i].breakfast = bfE->text().trimmed().toStdString();
+            uni.getWeeklyMenu().days[i].lunch = lunE->text().trimmed().toStdString();
+            uni.getWeeklyMenu().days[i].dinner = dinE->text().trimmed().toStdString();
             uni.getWeeklyMenu().days[i].mealsServed = servedE->value();
         }
     }
@@ -1424,7 +1486,7 @@ void MealBookingPage::refresh() {
         table->setItem(i, 0, new QTableWidgetItem(
             QString::fromStdString(uni.studentName(bk[i].studentId))));
         table->setItem(i, 1, new QTableWidgetItem(
-            QString::fromStdString(bk[i].date)));
+            Validate::toDisplay(bk[i].date)));
         table->setItem(i, 2, new QTableWidgetItem(
             QString::fromStdString(mealTypeToString(bk[i].meal))));
     }
@@ -1452,14 +1514,24 @@ void MealBookingPage::bookDialog() {
     QString sid = pickStudentId(this, uni);
     if (sid.isEmpty()) return;
     bool ok = false;
-    QString date = QInputDialog::getText(this, "Book Meal", "Date (YYYY-MM-DD):",
-                                         QLineEdit::Normal, "2026-06-08", &ok);
-    if (!ok || date.trimmed().isEmpty()) return;
+    QString date;
+    QDate parsedDate;
+    while (true) {
+        date = QInputDialog::getText(this, "Book Meal",
+            "Date (dd-mm-yyyy):",
+            QLineEdit::Normal,
+            date.isEmpty() ? Validate::todayUserFormat() : date, &ok);
+        if (!ok) return;
+        QString err = Validate::futureDate(date, &parsedDate);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Date", err);
+    }
     QString meal = QInputDialog::getItem(this, "Book Meal", "Meal:",
                                          {"Breakfast", "Lunch", "Dinner"}, 1, false, &ok);
     if (!ok) return;
     try {
-        uni.bookMeal(MealBooking(sid.toStdString(), date.toStdString(),
+        QString internalDate = Validate::toInternal(date);
+        uni.bookMeal(MealBooking(sid.toStdString(), internalDate.toStdString(),
                                   mealTypeFromString(meal.toStdString())));
         uni.logActivity("📅", ("Booked " + meal + " for "
                        + QString::fromStdString(uni.studentName(sid.toStdString()))).toStdString());
@@ -1516,7 +1588,7 @@ void HealthPage::refresh() {
         table->setItem(i, 0, new QTableWidgetItem(
             QString::fromStdString(uni.studentName(ap[i].studentId))));
         table->setItem(i, 1, new QTableWidgetItem(
-            QString::fromStdString(ap[i].date)));
+            Validate::toDisplay(ap[i].date)));
         table->setItem(i, 2, new QTableWidgetItem(
             QString::fromStdString(ap[i].time)));
         table->setItem(i, 3, new QTableWidgetItem(
@@ -1534,19 +1606,52 @@ void HealthPage::scheduleDialog() {
     QString sid = pickStudentId(this, uni);
     if (sid.isEmpty()) return;
     bool ok = false;
-    QString date = QInputDialog::getText(this, "Schedule", "Date (YYYY-MM-DD):",
-                                         QLineEdit::Normal, "2026-06-08", &ok);
-    if (!ok || date.trimmed().isEmpty()) return;
-    QString time = QInputDialog::getText(this, "Schedule", "Time (HH:MM):",
-                                         QLineEdit::Normal, "10:00", &ok);
-    if (!ok) return;
-    QString reason = QInputDialog::getText(this, "Schedule", "Reason:",
-                                           QLineEdit::Normal, "Check-up", &ok);
-    if (!ok) return;
+
+    // Date validation
+    QString date;
+    QDate parsedDate;
+    while (true) {
+        date = QInputDialog::getText(this, "Schedule Appointment",
+            "Date (dd-mm-yyyy):",
+            QLineEdit::Normal,
+            date.isEmpty() ? Validate::todayUserFormat() : date, &ok);
+        if (!ok) return;
+        QString err = Validate::futureDate(date, &parsedDate);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Date", err);
+    }
+
+    // Time validation
+    QString time;
+    while (true) {
+        time = QInputDialog::getText(this, "Schedule Appointment",
+            "Time (HH:MM, 24-hour format):",
+            QLineEdit::Normal,
+            time.isEmpty() ? "10:00" : time, &ok);
+        if (!ok) return;
+        QString err = Validate::time(time);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Time", err);
+    }
+
+    // Reason validation
+    QString reason;
+    while (true) {
+        reason = QInputDialog::getText(this, "Schedule Appointment",
+            "Reason for appointment:",
+            QLineEdit::Normal,
+            reason.isEmpty() ? "Check-up" : reason, &ok);
+        if (!ok) return;
+        QString err = Validate::notEmpty(reason, "Reason");
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Reason", err);
+    }
+
     try {
+        QString internalDate = Validate::toInternal(date);
         uni.getClinic().schedule(
-            Appointment(sid.toStdString(), date.toStdString(),
-                        time.toStdString(), reason.toStdString()));
+            Appointment(sid.toStdString(), internalDate.toStdString(),
+                        time.trimmed().toStdString(), reason.trimmed().toStdString()));
         uni.logActivity("🏥", ("Scheduled appointment for "
                        + QString::fromStdString(uni.studentName(sid.toStdString()))).toStdString());
                         refresh();
@@ -1732,22 +1837,48 @@ void ActivityPage::refresh() {
 void ActivityPage::addDialog() {
     const bool sports = (category == "Sports");
     bool ok = false;
-    QString name = QInputDialog::getText(this, "Add Activity", "Name:",
-                                         QLineEdit::Normal, "", &ok);
-    if (!ok || name.trimmed().isEmpty()) return;
-    QString sched = QInputDialog::getText(this, "Add Activity", "Schedule:",
-                                          QLineEdit::Normal, "", &ok);
-    if (!ok) return;
-    QString extra = QInputDialog::getText(this, "Add Activity",
-                                          sports ? "Coach:" : "Venue:",
-                                          QLineEdit::Normal, "", &ok);
-    if (!ok) return;
+
+    // Activity name validation
+    QString name;
+    while (true) {
+        name = QInputDialog::getText(this, "Add Activity", "Activity name:",
+            QLineEdit::Normal, name, &ok);
+        if (!ok) return;
+        QString err = Validate::activityName(name);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Activity Name", err);
+    }
+
+    // Schedule validation
+    QString sched;
+    while (true) {
+        sched = QInputDialog::getText(this, "Add Activity",
+            "Schedule (e.g. Mon & Wed 18:00):",
+            QLineEdit::Normal, sched, &ok);
+        if (!ok) return;
+        QString err = Validate::notEmpty(sched, "Schedule");
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid Schedule", err);
+    }
+
+    // Extra info validation
+    QString extraLabel = sports ? "Coach" : "Venue";
+    QString extra;
+    while (true) {
+        extra = QInputDialog::getText(this, "Add Activity",
+            extraLabel + ":", QLineEdit::Normal, extra, &ok);
+        if (!ok) return;
+        QString err = Validate::notEmpty(extra, extraLabel);
+        if (err.isEmpty()) break;
+        QMessageBox::warning(this, "Invalid " + extraLabel, err);
+    }
+
     if (sports)
         uni.addActivity(std::make_unique<SportsActivity>(
-            name.toStdString(), sched.toStdString(), extra.toStdString()));
+            name.trimmed().toStdString(), sched.trimmed().toStdString(), extra.trimmed().toStdString()));
     else
         uni.addActivity(std::make_unique<CulturalActivity>(
-            name.toStdString(), sched.toStdString(), extra.toStdString()));
+            name.trimmed().toStdString(), sched.trimmed().toStdString(), extra.trimmed().toStdString()));
     uni.logActivity(sports ? "⚽" : "🎭", ("Added activity " + name.trimmed()).toStdString());
     refresh();
 }

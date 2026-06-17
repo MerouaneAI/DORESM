@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DORESM – UML Class Diagram</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 30px;
+        }
+        #diagram {
+            width: 100%;
+            max-width: 1400px;
+            display: flex;
+            justify-content: center;
+        }
+        .mermaid {
+            width: 100%;
+        }
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .legend {
+            margin-top: 30px;
+            padding: 20px 30px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #f8fafc;
+            display: flex;
+            gap: 40px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #475569;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .legend-line {
+            width: 40px; height: 2px;
+        }
+        .solid { background: #333; }
+        .dashed { border-top: 2px dashed #333; background: none; }
+        .diamond {
+            width: 12px; height: 12px;
+            background: #333; transform: rotate(45deg);
+        }
+        .diamond-empty {
+            width: 12px; height: 12px;
+            border: 2px solid #333; transform: rotate(45deg); background: white;
+        }
+        .arrow { font-size: 16px; color: #333; }
+        @media print {
+            body { padding: 10px; }
+            .legend { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+    <h1>DORESM – UML Class Diagram</h1>
+    <p class="subtitle">Dormitory & Restaurant Management System — Model Layer Classes</p>
+
+    <div id="diagram">
+        <pre class="mermaid">
+classDiagram
+    direction TB
+
+    class MealType {
+        &lt;&lt;enumeration&gt;&gt;
+        Breakfast
+        Lunch
+        Dinner
+    }
+
+    class Menu {
+        &lt;&lt;struct&gt;&gt;
+        -breakfast : string
+        -lunch : string
+        -dinner : string
+    }
+
+    class DailyMenu {
+        &lt;&lt;struct&gt;&gt;
+        -breakfast : string
+        -lunch : string
+        -dinner : string
+        -mealsServed : int
+    }
+
+    class WeeklyMenu {
+        &lt;&lt;struct&gt;&gt;
+        -days : DailyMenu[7]
+    }
+
+    class MealBooking {
+        &lt;&lt;struct&gt;&gt;
+        -studentId : string
+        -date : string
+        -meal : MealType
+        -confirmed : bool
+        -served : bool
+    }
+
+    class Appointment {
+        &lt;&lt;struct&gt;&gt;
+        -studentId : string
+        -date : string
+        -time : string
+        -reason : string
+        -status : string
+    }
+
+    class Enrollment {
+        &lt;&lt;struct&gt;&gt;
+        -studentId : string
+        -status : string
+    }
+
+    class ActivityLogItem {
+        &lt;&lt;struct&gt;&gt;
+        -emoji : string
+        -text : string
+        -time : string
+    }
+
+    class Person {
+        &lt;&lt;abstract&gt;&gt;
+        #id : string
+        #fullName : string
+        +getId() string
+        +getFullName() string
+        +setFullName(name)
+        +role() string*
+    }
+
+    class Student {
+        -academicYear : int
+        -dormitoryId : string
+        -roomNumber : string
+        +getAcademicYear() int
+        +setAcademicYear(y)
+        +isAccommodated() bool
+        +assignAccommodation(dormId, room)
+        +clearAccommodation()
+        +accommodationStatus() string
+        +role() string
+    }
+
+    class Activity {
+        &lt;&lt;abstract&gt;&gt;
+        #name : string
+        #schedule : string
+        #enrollments : Enrollment[]
+        +apply(studentId)
+        +approve(studentId)
+        +refuse(studentId)
+        +withdraw(studentId)
+        +enroll(studentId)
+        +unenroll(studentId)
+        +hasEnrollment(studentId) bool
+        +category() string*
+        +describe() string
+    }
+
+    class SportsActivity {
+        -coach : string
+        +getCoach() string
+        +category() string
+        +describe() string
+    }
+
+    class CulturalActivity {
+        -venue : string
+        +getVenue() string
+        +category() string
+        +describe() string
+    }
+
+    class Room {
+        -number : string
+        -capacity : int
+        -type : string
+        -maintenance : bool
+        -occupants : string[]
+        +getCapacity() int
+        +isFull() bool
+        +isEmpty() bool
+        +addOccupant(studentId)
+        +removeOccupant(studentId)
+        +status() string
+    }
+
+    class Restaurant {
+        -name : string
+        -todayMenu : Menu
+        -mealsServedToday : int
+        +getMenu() Menu
+        +setMenu(m)
+        +serveMeal()
+        +resetMeals()
+    }
+
+    class Dormitory {
+        -id : string
+        -name : string
+        -rooms : Room[]
+        -restaurant : Restaurant
+        +addRoom(r)
+        +findRoom(number) Room
+        +removeRoom(number)
+        +totalCapacity() int
+        +totalOccupancy() int
+        +assignStudent(room, studentId)
+        +removeStudent(room, studentId)
+    }
+
+    class HealthClinic {
+        -appointments : Appointment[]
+        +schedule(a)
+        +cancel(index)
+    }
+
+    class University {
+        -name : string
+        -students : Student[]
+        -dormitories : Dormitory[]
+        -clinic : HealthClinic
+        -activities : Activity[]
+        -bookings : MealBooking[]
+        -weeklyMenu : WeeklyMenu
+        -activityLog : ActivityLogItem[]
+        +addStudent(s)
+        +removeStudent(id)
+        +findStudent(id) Student
+        +addDormitory(d)
+        +removeDormitory(id)
+        +findDormitory(id) Dormitory
+        +assignStudentToRoom(sid, did, room)
+        +removeStudentFromRoom(sid)
+        +bookMeal(b)
+        +saveToFiles(dir)
+        +loadFromFiles(dir)
+        +seedSampleData()
+        +logActivity(emoji, text)
+    }
+
+    Person <|-- Student : inherits
+    Activity <|-- SportsActivity : inherits
+    Activity <|-- CulturalActivity : inherits
+    Activity "1" *-- "*" Enrollment : contains
+
+    Restaurant "1" *-- "1" Menu : owns
+    Dormitory "1" *-- "*" Room : owns
+    Dormitory "1" *-- "1" Restaurant : owns
+
+    HealthClinic "1" *-- "*" Appointment : contains
+    WeeklyMenu "1" *-- "7" DailyMenu : contains
+
+    University "1" *-- "*" Student : owns
+    University "1" *-- "*" Dormitory : owns
+    University "1" *-- "1" HealthClinic : owns
+    University "1" *-- "*" Activity : owns
+    University "1" *-- "*" MealBooking : owns
+    University "1" *-- "1" WeeklyMenu : owns
+    University "1" *-- "*" ActivityLogItem : owns
+
+    MealBooking ..> MealType : uses
+        </pre>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="diamond"></div> <strong>Composition</strong> — owns (lifecycle-bound)</div>
+        <div class="legend-item"><span class="arrow">◁━━</span> <strong>Inheritance</strong> — extends / implements</div>
+        <div class="legend-item"><span class="arrow">- - -▶</span> <strong>Dependency</strong> — uses</div>
+        <div class="legend-item"><span style="font-weight:600; color:#6366f1;">*</span> &nbsp;<strong>Abstract</strong> — pure virtual method</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '14px',
+                classText: '#1e293b',
+            },
+            class: {
+                defaultRenderer: 'dagre-wrapper'
+            }
+        });
+    </script>
+</body>
+</html>

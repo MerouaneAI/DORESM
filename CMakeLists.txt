@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(udrms LANGUAGES CXX)
+project(doresm LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,7 @@ if (NOT Qt6_FOUND)
 endif()
 
 
-add_executable(udrms WIN32
+add_executable(doresm WIN32
     main.cpp
     model/Common.cpp
     model/Student.cpp
@@ -36,10 +36,10 @@ add_executable(udrms WIN32
     gui/StaffPages.cpp
 )
 
-target_include_directories(udrms PRIVATE ${CMAKE_SOURCE_DIR})
+target_include_directories(doresm PRIVATE ${CMAKE_SOURCE_DIR})
 
 if (Qt6_FOUND)
-    target_link_libraries(udrms PRIVATE Qt6::Widgets)
+    target_link_libraries(doresm PRIVATE Qt6::Widgets)
 else()
-    target_link_libraries(udrms PRIVATE Qt5::Widgets)
+    target_link_libraries(doresm PRIVATE Qt5::Widgets)
 endif()

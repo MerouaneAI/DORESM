@@ -19,7 +19,7 @@ DormAdminWindow::DormAdminWindow(University& u, const std::string& did,
     Dormitory* d = uni.findDormitory(dormId);
     QString dormName = d ? QString::fromStdString(d->getName()) : "Dormitory";
 
-    setWindowTitle("UDRMS – Dorm Admin • " + dormName);
+    setWindowTitle("DORESM – Dorm Admin • " + dormName);
 
     auto* central = new QWidget;
     auto* h = new QHBoxLayout(central);
@@ -45,7 +45,7 @@ DormAdminWindow::DormAdminWindow(University& u, const std::string& did,
     auto* brandCol = new QWidget;
     auto* brandColV = new QVBoxLayout(brandCol);
     brandColV->setContentsMargins(0, 0, 0, 0); brandColV->setSpacing(0);
-    auto* brandName = new QLabel("UDRMS");
+    auto* brandName = new QLabel("DORESM");
     brandName->setObjectName("Brand");
     auto* brandSub  = new QLabel("Dorm Admin");
     brandSub->setObjectName("BrandSub");

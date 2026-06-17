@@ -17,7 +17,7 @@ StudentWindow::StudentWindow(University& u, const QString& sid, QWidget* parent)
     Student* s = currentStudent();
     QString name = s ? QString::fromStdString(s->getFullName()) : "Student";
 
-    setWindowTitle("UDRMS – Student Portal • " + name);
+    setWindowTitle("DORESM – Student Portal • " + name);
 
     auto* central = new QWidget;
     auto* h = new QHBoxLayout(central);
@@ -43,7 +43,7 @@ StudentWindow::StudentWindow(University& u, const QString& sid, QWidget* parent)
     auto* brandCol = new QWidget;
     auto* brandColV = new QVBoxLayout(brandCol);
     brandColV->setContentsMargins(0, 0, 0, 0); brandColV->setSpacing(0);
-    auto* brandName = new QLabel("UDRMS");
+    auto* brandName = new QLabel("DORESM");
     brandName->setObjectName("Brand");
     auto* brandSub  = new QLabel("Student Portal");
     brandSub->setObjectName("BrandSub");

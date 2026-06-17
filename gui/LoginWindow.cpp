@@ -13,7 +13,7 @@
 LoginWindow::LoginWindow(University& u, QWidget* parent)
     : QWidget(parent), uni(u)
 {
-    setWindowTitle("UDRMS – Login");
+    setWindowTitle("DORESM – Login");
     setMinimumSize(900, 600);
 
     // Background
@@ -36,12 +36,12 @@ LoginWindow::LoginWindow(University& u, QWidget* parent)
     leftLay->addWidget(brandIcon);
     leftLay->addSpacing(16);
 
-    auto* brandTitle = new QLabel("UDRMS");
+    auto* brandTitle = new QLabel("DORESM");
     brandTitle->setAlignment(Qt::AlignCenter);
     brandTitle->setStyleSheet("font-size: 36px; font-weight: 800; color: #FFFFFF; background: transparent; letter-spacing: 3px;");
     leftLay->addWidget(brandTitle);
 
-    auto* brandSub = new QLabel("University Dormitory & Restaurant\nManagement System");
+    auto* brandSub = new QLabel("Dormitory & Restaurant\nManagement System");
     brandSub->setAlignment(Qt::AlignCenter);
     brandSub->setStyleSheet("font-size: 13px; color: #9CA3AF; background: transparent; line-height: 1.5;");
     leftLay->addWidget(brandSub);
@@ -56,7 +56,7 @@ LoginWindow::LoginWindow(University& u, QWidget* parent)
 
     leftLay->addSpacing(20);
 
-    auto* tagline = new QLabel("ENSIA 2025–26");
+    auto* tagline = new QLabel("University 2025–26");
     tagline->setAlignment(Qt::AlignCenter);
     tagline->setStyleSheet("font-size: 12px; color: #6B7280; background: transparent; letter-spacing: 2px;");
     leftLay->addWidget(tagline);
@@ -150,11 +150,7 @@ LoginWindow::LoginWindow(University& u, QWidget* parent)
 
     cardLay->addStretch();
 
-    // Role hint
-    auto* hint = new QLabel("Admin: admin / admin  •  Staff: staff / staff\nDorm: dorm name / dorm ID  •  Student: full name / ID");
-    hint->setAlignment(Qt::AlignCenter);
-    hint->setStyleSheet("font-size: 11px; color: #9CA3AF; background: transparent;");
-    cardLay->addWidget(hint);
+
 
     rightLay->addWidget(card, 0, Qt::AlignCenter);
     mainLay->addWidget(rightPanel, 1);
@@ -180,10 +176,14 @@ void LoginWindow::attemptLogin() {
         return;
     }
 
-    // Staff login
-    if (user.compare("staff", Qt::CaseInsensitive) == 0 && pass == "staff") {
-        emit staffLoggedIn();
-        return;
+    // Staff login: username = "Staff X" (case-insensitive), password = "staffX"
+    for (const auto& d : uni.getDormitories()) {
+        QString staffUser = "Staff " + QString::fromStdString(d.getId());
+        QString staffPass = "staff" + QString::fromStdString(d.getId());
+        if (user.compare(staffUser, Qt::CaseInsensitive) == 0 && pass == staffPass) {
+            emit staffLoggedIn(QString::fromStdString(d.getId()));
+            return;
+        }
     }
 
     // Dorm admin login: username = dormitory name, password = dorm ID

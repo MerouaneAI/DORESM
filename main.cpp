@@ -12,11 +12,13 @@ int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     app.setStyleSheet(APP_STYLESHEET);
 
-    University uni("ENSIA");
+    University uni("University");
     if (std::filesystem::exists("data/dormitories.txt"))
         uni.loadFromFiles("data");
-    else
+    else {
         uni.seedSampleData();
+        uni.saveToFiles("data");   // generate data files including credentials.txt
+    }
 
     // Clean up expired meal bookings and past appointments
     uni.cleanupExpired();
@@ -75,9 +77,9 @@ int main(int argc, char* argv[]) {
             });
         });
 
-        QObject::connect(loginWin, &LoginWindow::staffLoggedIn, [&]() {
+        QObject::connect(loginWin, &LoginWindow::staffLoggedIn, [&](const QString& dormId) {
             loginWin->hide();
-            staffWin = new StaffWindow(uni);
+            staffWin = new StaffWindow(uni, dormId.toStdString());
             staffWin->resize(1100, 700);
             staffWin->show();
 

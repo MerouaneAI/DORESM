@@ -12,10 +12,12 @@
 #include <QFrame>
 #include <QCloseEvent>
 
-StaffWindow::StaffWindow(University& u, QWidget* parent)
-    : QMainWindow(parent), uni(u)
+StaffWindow::StaffWindow(University& u, const std::string& dId, QWidget* parent)
+    : QMainWindow(parent), uni(u), dormId(dId)
 {
-    setWindowTitle("UDRMS – Dorms & Restaurant Staff");
+    Dormitory* dorm = uni.findDormitory(dormId);
+    QString dormName = dorm ? QString::fromStdString(dorm->getName()) : QString::fromStdString(dormId);
+    setWindowTitle("DORESM – Staff " + QString::fromStdString(dormId) + " (" + dormName + ")");
 
     auto* central = new QWidget;
     auto* h = new QHBoxLayout(central);
@@ -41,9 +43,9 @@ StaffWindow::StaffWindow(University& u, QWidget* parent)
     auto* brandCol = new QWidget;
     auto* brandColV = new QVBoxLayout(brandCol);
     brandColV->setContentsMargins(0, 0, 0, 0); brandColV->setSpacing(0);
-    auto* brandName = new QLabel("UDRMS");
+    auto* brandName = new QLabel("DORESM");
     brandName->setObjectName("Brand");
-    auto* brandSub  = new QLabel("Staff Portal");
+    auto* brandSub  = new QLabel("Staff " + QString::fromStdString(dormId) + " Portal");
     brandSub->setObjectName("BrandSub");
     brandColV->addWidget(brandName);
     brandColV->addWidget(brandSub);
@@ -59,9 +61,9 @@ StaffWindow::StaffWindow(University& u, QWidget* parent)
 
     // Pages
     stack = new QStackedWidget;
-    stack->addWidget(new StaffDashboardPage(uni));      // 0
-    stack->addWidget(new StaffMaintenancePage(uni));     // 1
-    stack->addWidget(new StaffRestaurantPage(uni));      // 2
+    stack->addWidget(new StaffDashboardPage(uni, dormId));      // 0
+    stack->addWidget(new StaffMaintenancePage(uni, dormId));     // 1
+    stack->addWidget(new StaffRestaurantPage(uni, dormId));      // 2
 
     struct NavItem { const char* icon; const char* label; };
     NavItem items[] = {
@@ -103,9 +105,9 @@ StaffWindow::StaffWindow(University& u, QWidget* parent)
     auto* staffCol  = new QWidget;
     auto* staffColV = new QVBoxLayout(staffCol);
     staffColV->setContentsMargins(0, 0, 0, 0); staffColV->setSpacing(1);
-    auto* staffNameW = new QLabel("Staff User");
+    auto* staffNameW = new QLabel("Staff " + QString::fromStdString(dormId));
     staffNameW->setObjectName("SideAdminName");
-    auto* staffRoleW = new QLabel("Dorms & Restaurant");
+    auto* staffRoleW = new QLabel(dormName);
     staffRoleW->setObjectName("SideAdminRole");
     staffColV->addWidget(staffNameW);
     staffColV->addWidget(staffRoleW);
