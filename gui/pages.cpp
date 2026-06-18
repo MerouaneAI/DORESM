@@ -569,6 +569,9 @@ void DormitoriesPage::deleteRoomDialog(const QString& dormId) {
     bool ok = false;
     QString num = QInputDialog::getItem(this, "Delete Room", "Room:", rooms, 0, false, &ok);
     if (!ok) return;
+    if (QMessageBox::question(this, "Delete Room",
+            QString("Are you sure you want to delete room %1?").arg(num))
+        != QMessageBox::Yes) return;
     try {
         d->removeRoom(num.toStdString());   // throws if occupied
         uni.logActivity("🗑", ("Deleted room " + num + " from " +
@@ -1247,6 +1250,9 @@ void StudentsPage::refresh() {
             return;
         }
         QString id = table->item(r, 0)->text();
+        if (QMessageBox::question(this, "Remove Student",
+                QString("Are you sure you want to remove student %1?").arg(id))
+            != QMessageBox::Yes) return;
         try { uni.removeStudent(id.toStdString());
             uni.logActivity("👥", "Removed student " + id.toStdString());
             refresh(); }
