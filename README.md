@@ -26,6 +26,7 @@ A comprehensive Qt6/C++17 desktop application for managing university dormitorie
 - [Build & Run](#-build--run)
 - [User Roles & Credentials](#-user-roles--credentials)
 - [Input Validation](#-input-validation)
+- [Software Engineering Principles](#️-software-engineering-principles)
 - [Design Patterns](#-design-patterns)
 - [Data Persistence](#-data-persistence)
 - [License](#-license)
