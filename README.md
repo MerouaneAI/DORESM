@@ -89,6 +89,13 @@ Built with **pure C++17** and **Qt6 Widgets**, the application features a modern
 - Recent activity log with emoji indicators
 - Quick navigation to all management modules
 
+### 🗑️ Recycle Bin (Archive)
+- Safe deletion with confirmation dialogs across the application
+- Dedicated "Recycle Bin" page to view all deleted students, rooms, and dormitories
+- Restore functionality (restoring a dormitory automatically restores its rooms)
+- Permanent deletion and "Empty Recycle Bin" options
+- Persistent archive data across application restarts
+
 ---
 
 ## 🏗️ Architecture
@@ -200,7 +207,8 @@ DORESM/
 │   ├── bookings.txt            # Meal bookings
 │   ├── appointments.txt        # Health appointments
 │   ├── activities.txt          # Activity definitions
-│   └── menu.txt                # Weekly menu data
+│   ├── menu.txt                # Weekly menu data
+│   └── archive.txt             # Recycle bin / deleted items archive
 │
 ├── uml_class_diagram.png       # UML class diagram (image)
 └── uml_class_diagram.html      # UML class diagram (interactive)
@@ -306,6 +314,19 @@ All user inputs are validated with clear, descriptive error messages. Invalid en
 | **Activity Name** | 2–60 characters | `Football Training` |
 
 > Validation logic is centralized in [`gui/Validation.h`](gui/Validation.h).
+
+---
+
+## 🛠️ Software Engineering Principles
+
+This project was built adhering to core software engineering principles to ensure maintainability, security, and robustness:
+
+- **Authentication & Authorization**: Secure, role-based access control (RBAC). Users are authenticated against their role, and authorized to see only the data and actions relevant to them (e.g., a Dormitory Admin can only manage their specific dormitory).
+- **Data Persistence**: A robust, lightweight file-based storage system that ensures state is seamlessly saved and restored across application sessions without requiring an external database.
+- **Data Integrity**: Strict enforcement of business rules at the model layer (e.g., preventing the assignment of students to full rooms, preventing the deletion of occupied dormitories, and cascading unassignments when a dormitory is archived).
+- **Soft Deletion & Archiving**: Implementation of a "Recycle Bin" allowing users to safely recover from accidental deletions, ensuring critical records aren't permanently lost by mistake.
+- **Edge Case Handling**: Comprehensive defensive programming. The system gracefully handles missing files, malformed user inputs, scheduling conflicts, and prevents duplicate unique IDs.
+- **Separation of Concerns (SoC)**: Strict division between the Model layer (business logic/data) and the GUI layer (presentation), ensuring that UI changes don't affect underlying business rules.
 
 ---
 
