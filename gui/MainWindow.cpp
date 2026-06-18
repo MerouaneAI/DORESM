@@ -70,6 +70,7 @@ MainWindow::MainWindow(University& u, QWidget* parent)
     stack->addWidget(new ActivityPage(uni, "Sports"));         // 6
     stack->addWidget(new HealthPage(uni));                     // 7
     stack->addWidget(new ActivityPage(uni, "Cultural"));       // 8
+    stack->addWidget(new ArchivePage(uni));                    // 9
 
     struct NavItem { const char* icon; const char* label; };
     NavItem items[] = {
@@ -82,8 +83,9 @@ MainWindow::MainWindow(University& u, QWidget* parent)
         {"⚽", "Sports Activities"},
         {"🏥", "Health Clinic"},
         {"🎭", "Cultural Activities"},
+        {"🗑", "Recycle Bin"},
     };
-    for (int i = 0; i < 9; ++i)
+    for (int i = 0; i < 10; ++i)
         addNav(sideLay, items[i].icon, items[i].label, i);
 
     sideLay->addStretch();

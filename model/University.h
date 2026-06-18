@@ -15,6 +15,16 @@ struct ActivityLogItem {
     std::string time;   // "HH:MM"
 };
 
+struct ArchiveItem {
+    std::string archiveId;  // Unique ID for the archive entry
+    std::string type;       // "Student", "Room", or "Dormitory"
+    std::string objectId;   // Original ID (Student ID, Room Number, etc.)
+    std::string parentId;   // Dormitory ID for Rooms, otherwise empty
+    std::string name;       // Human readable name
+    std::string deletedAt;  // Timestamp of deletion
+    std::string data;       // Serialized data to allow restoration
+};
+
 class University {
 private:
     std::string name;
@@ -25,6 +35,7 @@ private:
     std::vector<MealBooking>               bookings;
     std::vector<ActivityLogItem> activityLog;
     WeeklyMenu weeklyMenu;
+    std::vector<ArchiveItem>               archive;
 public:
     explicit University(std::string name = "University") : name(std::move(name)) {}
 
@@ -81,6 +92,14 @@ void logActivity(const std::string& emoji, const std::string& text);
 
 // ----- Dormitories (new) -----
 void removeDormitory(const std::string& id);   // unassigns residents, then deletes
+void removeRoomFromDormitory(const std::string& dormId, const std::string& roomNumber); // deletes and archives
+
+// ----- Archive -----
+std::vector<ArchiveItem>& getArchive() { return archive; }
+const std::vector<ArchiveItem>& getArchive() const { return archive; }
+void restoreFromArchive(const std::string& archiveId);
+void permanentlyDeleteArchive(const std::string& archiveId);
+void emptyArchive();
 
 // ----- Time-based cleanup -----
 void cleanupExpired();   // removes past meal bookings and past appointments

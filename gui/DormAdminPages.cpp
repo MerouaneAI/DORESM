@@ -362,7 +362,7 @@ void DormAdminDormitoryPage::deleteRoomDialog() {
             QString("Are you sure you want to delete room %1?").arg(num))
         != QMessageBox::Yes) return;
     try {
-        d->removeRoom(num.toStdString());
+        uni.removeRoomFromDormitory(dormId, num.toStdString());
         uni.logActivity("🗑", ("Deleted room " + num + " from " +
                                QString::fromStdString(d->getName())).toStdString());
         refresh();

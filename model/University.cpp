@@ -38,6 +38,23 @@ void University::removeStudent(const std::string& id) {
     Student* s = findStudent(id);
     if (!s) throw std::runtime_error("Student not found: " + id);
     if (s->isAccommodated()) removeStudentFromRoom(id);
+    
+    ArchiveItem ai;
+    ai.archiveId = "arch_" + std::to_string(std::time(nullptr)) + "_" + id;
+    ai.type = "Student";
+    ai.objectId = s->getId();
+    ai.parentId = "";
+    ai.name = s->getFullName();
+    
+    char buf[20];
+    std::time_t now = std::time(nullptr);
+    if (const std::tm* tm = std::localtime(&now))
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", tm);
+    ai.deletedAt = buf;
+    
+    ai.data = s->getId() + "|" + s->getFullName() + "|" + std::to_string(s->getAcademicYear()) + "|" + s->getDormitoryId() + "|" + s->getRoomNumber();
+    archive.push_back(ai);
+
     students.erase(std::remove_if(students.begin(), students.end(),
         [&](const Student& x){ return x.getId() == id; }), students.end());
 }
@@ -173,6 +190,12 @@ void University::saveToFiles(const std::string& dir) const {
     for (const auto& ap : clinic.getAppointments())
         fc << ap.studentId << '|' << ap.date << '|' << ap.time << '|'
            << ap.reason << '|' << ap.status << '\n';
+
+    std::ofstream farch(dir + "/archive.txt");
+    for (const auto& ai : archive) {
+        farch << ai.archiveId << "||" << ai.type << "||" << ai.objectId << "||"
+              << ai.parentId << "||" << ai.name << "||" << ai.deletedAt << "||" << ai.data << '\n';
+    }
 
     // ── Auto-generate credentials.txt ────────────────────────────────
     std::ofstream cr(dir + "/credentials.txt");
@@ -319,6 +342,29 @@ void University::loadFromFiles(const std::string& dir) {
         auto t = split(line, '|');
         clinic.schedule(Appointment(t[0], t[1], t[2], t[3], t.size() > 4 ? t[4] : "Scheduled"));
     }
+
+    std::ifstream farch(dir + "/archive.txt");
+    while (std::getline(farch, line)) {
+        if (line.empty()) continue;
+        size_t pos = 0;
+        std::vector<std::string> parts;
+        while ((pos = line.find("||")) != std::string::npos) {
+            parts.push_back(line.substr(0, pos));
+            line.erase(0, pos + 2);
+        }
+        parts.push_back(line);
+        if (parts.size() >= 7) {
+            ArchiveItem ai;
+            ai.archiveId = parts[0];
+            ai.type = parts[1];
+            ai.objectId = parts[2];
+            ai.parentId = parts[3];
+            ai.name = parts[4];
+            ai.deletedAt = parts[5];
+            ai.data = parts[6];
+            archive.push_back(ai);
+        }
+    }
 }
 
 // ---------- Demo data (matches the dashboard mockup) ----------
@@ -384,8 +430,105 @@ void University::removeDormitory(const std::string& id) {
     for (auto& s : students)
         if (s.isAccommodated() && s.getDormitoryId() == id)
             s.clearAccommodation();
+
+    ArchiveItem ai;
+    ai.archiveId = "arch_" + std::to_string(std::time(nullptr)) + "_" + id;
+    ai.type = "Dormitory";
+    ai.objectId = d->getId();
+    ai.parentId = "";
+    ai.name = d->getName();
+    
+    char buf[20];
+    std::time_t now = std::time(nullptr);
+    if (const std::tm* tm = std::localtime(&now))
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", tm);
+    ai.deletedAt = buf;
+    
+    std::stringstream ss;
+    ss << "DORM|" << d->getId() << "|" << d->getName();
+    for (const auto& r : d->getRooms()) {
+        ss << "~ROOM|" << r.getNumber() << "|" << r.getCapacity() << "|" << r.getType() << "|" << (r.isUnderMaintenance() ? 1 : 0);
+    }
+    ai.data = ss.str();
+    archive.push_back(ai);
+
     dormitories.erase(std::remove_if(dormitories.begin(), dormitories.end(),
         [&](const Dormitory& x){ return x.getId() == id; }), dormitories.end());
+}
+
+void University::removeRoomFromDormitory(const std::string& dormId, const std::string& roomNumber) {
+    Dormitory* d = findDormitory(dormId);
+    if (!d) throw std::runtime_error("Dormitory not found: " + dormId);
+    Room* r = d->findRoom(roomNumber);
+    if (!r) throw std::runtime_error("Room not found: " + roomNumber);
+    if (!r->isEmpty()) throw std::runtime_error("Cannot delete a room that still has residents");
+    
+    ArchiveItem ai;
+    ai.archiveId = "arch_" + std::to_string(std::time(nullptr)) + "_" + roomNumber;
+    ai.type = "Room";
+    ai.objectId = r->getNumber();
+    ai.parentId = dormId;
+    ai.name = "Room " + r->getNumber() + " (" + r->getType() + ")";
+    
+    char buf[20];
+    std::time_t now = std::time(nullptr);
+    if (const std::tm* tm = std::localtime(&now))
+        std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M", tm);
+    ai.deletedAt = buf;
+    
+    ai.data = r->getNumber() + "|" + std::to_string(r->getCapacity()) + "|" + r->getType() + "|" + (r->isUnderMaintenance() ? "1" : "0");
+    archive.push_back(ai);
+    
+    d->removeRoom(roomNumber);
+}
+
+void University::restoreFromArchive(const std::string& archiveId) {
+    auto it = std::find_if(archive.begin(), archive.end(), [&](const ArchiveItem& a){ return a.archiveId == archiveId; });
+    if (it == archive.end()) throw std::runtime_error("Archive item not found");
+    
+    if (it->type == "Student") {
+        auto parts = split(it->data, '|');
+        if (parts.size() >= 3) {
+            Student s(parts[0], parts[1], std::stoi(parts[2]));
+            addStudent(s);
+        }
+    } else if (it->type == "Room") {
+        auto parts = split(it->data, '|');
+        if (parts.size() >= 4) {
+            Dormitory* d = findDormitory(it->parentId);
+            if (!d) throw std::runtime_error("Parent dormitory no longer exists. Restore it first.");
+            Room r(parts[0], std::stoi(parts[1]), parts[2]);
+            if (parts[3] == "1") r.setMaintenance(true);
+            d->addRoom(r);
+        }
+    } else if (it->type == "Dormitory") {
+        auto lines = split(it->data, '~');
+        if (!lines.empty()) {
+            auto dParts = split(lines[0], '|');
+            if (dParts.size() >= 3 && dParts[0] == "DORM") {
+                Dormitory d(dParts[1], dParts[2]);
+                for (size_t i = 1; i < lines.size(); ++i) {
+                    auto rParts = split(lines[i], '|');
+                    if (rParts.size() >= 5 && rParts[0] == "ROOM") {
+                        Room r(rParts[1], std::stoi(rParts[2]), rParts[3]);
+                        if (rParts[4] == "1") r.setMaintenance(true);
+                        d.addRoom(r);
+                    }
+                }
+                addDormitory(d);
+            }
+        }
+    }
+    archive.erase(it);
+}
+
+void University::permanentlyDeleteArchive(const std::string& archiveId) {
+    archive.erase(std::remove_if(archive.begin(), archive.end(), 
+        [&](const ArchiveItem& a){ return a.archiveId == archiveId; }), archive.end());
+}
+
+void University::emptyArchive() {
+    archive.clear();
 }
 
 // ---------- Time-based cleanup ----------

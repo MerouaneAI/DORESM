@@ -573,7 +573,7 @@ void DormitoriesPage::deleteRoomDialog(const QString& dormId) {
             QString("Are you sure you want to delete room %1?").arg(num))
         != QMessageBox::Yes) return;
     try {
-        d->removeRoom(num.toStdString());   // throws if occupied
+        uni.removeRoomFromDormitory(dormId.toStdString(), num.toStdString());
         uni.logActivity("🗑", ("Deleted room " + num + " from " +
                                QString::fromStdString(d->getName())).toStdString());
         refresh();
@@ -1891,4 +1891,88 @@ void ActivityPage::addDialog() {
 
 void ActivityPage::enrollDialog() {
     // No longer needed — enrollment happens through student applications
+}
+
+// ─── Archive Page ────────────────────────────────────────────────────────────
+
+ArchivePage::ArchivePage(University& u, QWidget* parent)
+    : QWidget(parent), uni(u)
+{
+    root = new QVBoxLayout(this);
+    root->setContentsMargins(28, 24, 28, 24);
+    root->setSpacing(20);
+    refresh();
+}
+
+void ArchivePage::refresh() {
+    clearLayout(root);
+
+    auto* head = new QHBoxLayout;
+    head->addWidget(pageHeader("🗑 Recycle Bin",
+        "View, restore, or permanently delete archived items."));
+    head->addStretch();
+    
+    auto* emptyBtn = new QPushButton("Empty Recycle Bin");
+    emptyBtn->setStyleSheet("color: #EF4444; border: 1px solid #EF4444; padding: 6px 12px; border-radius: 6px;");
+    head->addWidget(emptyBtn);
+    root->addLayout(head);
+
+    auto* tableCard = makeCard();
+    auto* tv = new QVBoxLayout(tableCard);
+    tv->setContentsMargins(0, 0, 0, 0);
+
+    auto* table = makeTable({"Type", "Name / ID", "Deleted At", "Archive ID"});
+    table->setColumnHidden(3, true); // hide Archive ID
+    const auto& archive = uni.getArchive();
+    table->setRowCount(static_cast<int>(archive.size()));
+    table->setMinimumHeight(300);
+    
+    for (int i = 0; i < static_cast<int>(archive.size()); ++i) {
+        const auto& item = archive[archive.size() - 1 - i]; // Show newest first
+        table->setItem(i, 0, new QTableWidgetItem(QString::fromStdString(item.type)));
+        table->setItem(i, 1, new QTableWidgetItem(QString::fromStdString(item.name + " (" + item.objectId + ")")));
+        table->setItem(i, 2, new QTableWidgetItem(QString::fromStdString(item.deletedAt)));
+        table->setItem(i, 3, new QTableWidgetItem(QString::fromStdString(item.archiveId)));
+    }
+    tv->addWidget(table);
+    root->addWidget(tableCard);
+
+    auto* btnRow = new QHBoxLayout;
+    btnRow->addStretch();
+    auto* restoreBtn = new QPushButton("🔄 Restore Selected");
+    auto* permDeleteBtn = new QPushButton("❌ Delete Permanently");
+    permDeleteBtn->setStyleSheet("background: #EF4444; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold; border: none;");
+    restoreBtn->setStyleSheet("background: #4C6FFF; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold; border: none;");
+    btnRow->addWidget(restoreBtn);
+    btnRow->addWidget(permDeleteBtn);
+    root->addLayout(btnRow);
+
+    connect(emptyBtn, &QPushButton::clicked, this, [this]{
+        if (uni.getArchive().empty()) return;
+        if (QMessageBox::question(this, "Empty Recycle Bin", "Are you sure you want to permanently delete all archived items?") != QMessageBox::Yes) return;
+        uni.emptyArchive();
+        refresh();
+    });
+
+    connect(restoreBtn, &QPushButton::clicked, this, [this, table]{
+        int r = table->currentRow();
+        if (r < 0) { QMessageBox::warning(this, "Select Item", "Please select an item to restore."); return; }
+        QString archId = table->item(r, 3)->text();
+        try {
+            uni.restoreFromArchive(archId.toStdString());
+            QMessageBox::information(this, "Restored", "Item successfully restored.");
+            refresh();
+        } catch (const std::exception& e) {
+            QMessageBox::warning(this, "Restore Failed", e.what());
+        }
+    });
+
+    connect(permDeleteBtn, &QPushButton::clicked, this, [this, table]{
+        int r = table->currentRow();
+        if (r < 0) { QMessageBox::warning(this, "Select Item", "Please select an item to delete permanently."); return; }
+        QString archId = table->item(r, 3)->text();
+        if (QMessageBox::question(this, "Permanent Delete", "Are you sure you want to permanently delete this item? This cannot be undone.") != QMessageBox::Yes) return;
+        uni.permanentlyDeleteArchive(archId.toStdString());
+        refresh();
+    });
 }

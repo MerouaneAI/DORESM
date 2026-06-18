@@ -107,3 +107,11 @@ private:
     University& uni; QString category; QVBoxLayout* root;
     void addDialog(); void enrollDialog();
 };
+
+class ArchivePage : public QWidget, public Refreshable {
+public:
+    explicit ArchivePage(University& uni, QWidget* parent = nullptr);
+    void refresh() override;
+private:
+    University& uni; QVBoxLayout* root;
+};
