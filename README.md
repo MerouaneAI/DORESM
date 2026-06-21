@@ -18,6 +18,7 @@ A comprehensive Qt6/C++17 desktop application for managing university dormitorie
 ## 📋 Table of Contents
 
 - [Overview](#-overview)
+- [Screenshots](#-screenshots)
 - [Features](#-features)
 - [Architecture](#-architecture)
 - [UML Class Diagram](#-uml-class-diagram)
@@ -38,6 +39,45 @@ A comprehensive Qt6/C++17 desktop application for managing university dormitorie
 **DORESM** is a multi-role university management system that provides separate dashboards and functionality for four distinct user types: **Administrators**, **Dormitory Admins**, **Staff**, and **Students**. The system handles the complete lifecycle of dormitory management — from room allocation and maintenance tracking to restaurant menu planning, meal booking, health clinic appointments, and activity enrollment.
 
 Built with **pure C++17** and **Qt6 Widgets**, the application features a modern, polished UI with a sidebar navigation pattern, responsive card-based layouts, and comprehensive input validation with user-friendly error messages.
+
+---
+
+## 📸 Screenshots
+
+### Login Screen
+> Branded entry point with role-based authentication.
+
+<div align="center">
+  <img src="screenshots/login.png" alt="DORESM Login Screen" width="80%"/>
+</div>
+
+### Admin Dashboard
+> Central hub with real-time statistics, quick-access module cards, recent activity log, and dormitory occupancy overview.
+
+<div align="center">
+  <img src="screenshots/admin_dashboard.png" alt="Admin Dashboard" width="100%"/>
+</div>
+
+### Student Management & Input Validation
+> Full student records management with filtering, accommodation tracking, and descriptive validation error messages.
+
+<div align="center">
+  <img src="screenshots/students_validation.png" alt="Students Page with Validation" width="100%"/>
+</div>
+
+### Dormitory Admin Portal
+> Role-scoped dashboard for individual dormitory administrators — manage rooms, students, restaurant, and health appointments for their own dormitory only.
+
+<div align="center">
+  <img src="screenshots/dorm_admin_dashboard.png" alt="Dorm Admin Dashboard" width="100%"/>
+</div>
+
+### Staff Portal
+> Maintenance and meal service overview for dormitory staff, including today's menu and room status.
+
+<div align="center">
+  <img src="screenshots/staff_dashboard.png" alt="Staff Dashboard" width="100%"/>
+</div>
 
 ---
 
