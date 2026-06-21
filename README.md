@@ -11,6 +11,16 @@ A comprehensive Qt6/C++17 desktop application for managing university dormitorie
 [![CMake](https://img.shields.io/badge/CMake-3.16+-orange.svg?logo=cmake)](https://cmake.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+---
+
+<a href="#-screenshots"><img src="screenshots/login.png" alt="Login" width="19%"/></a>
+<a href="#-screenshots"><img src="screenshots/admin_dashboard.png" alt="Admin Dashboard" width="19%"/></a>
+<a href="#-screenshots"><img src="screenshots/students_validation.png" alt="Students" width="19%"/></a>
+<a href="#-screenshots"><img src="screenshots/dorm_admin_dashboard.png" alt="Dorm Admin" width="19%"/></a>
+<a href="#-screenshots"><img src="screenshots/staff_dashboard.png" alt="Staff" width="19%"/></a>
+
+*Click any screenshot to see full-size versions below ↓*
+
 </div>
 
 ---
