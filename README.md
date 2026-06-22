@@ -282,7 +282,7 @@ DORESM/
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/doresm.git
+git clone https://github.com/MerouaneAI/doresm.git
 cd doresm
 ```
 
