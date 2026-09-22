@@ -7,39 +7,19 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build-ubuntu:
+  build:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install System Dependencies for Qt on Linux
-      run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev
-
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: '6.5.0'
+    - name: Install Qt6 and Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential qt6-base-dev qt6-tools-dev-tools libgl1-mesa-dev
 
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config Release
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: '6.5.0'
-
-    - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
-
-    - name: Build
-      run: cmake --build ${{github.workspace}}/build --config Release
+      run: cmake --build build --config Release
